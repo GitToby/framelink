@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Callable, TypeVar
 
+import networkx as nx
 import pandas as pd
 import polars as pl
 
@@ -57,7 +58,7 @@ class _Model:
         #     res.to_csv(settings.persist_models_dir / f"{self.name}.csv")
         return res
 
-    def __key(self):
+    def __key(self) -> tuple[str, str]:
         return self.name, self.source
 
     def __hash__(self) -> int:
@@ -66,6 +67,7 @@ class _Model:
 
 class Pypeline:
     _models: dict[str, _Model] = dict()
+    _graph: nx.DiGraph = nx.DiGraph()
 
     def __init__(self, settings: PypelineSettings = PypelineSettings()):
         self.settings = settings
@@ -74,10 +76,9 @@ class Pypeline:
         # todo: add a metadata obj with implied schema?
         m = _Model(func)
         self._models[m.name] = m
+        self._graph.add_node(m)
 
-    @property
-    def model_names(self):
-        return self._models.keys()
+        # todo, scan node & add edges
 
     def get(self, model_name) -> _Model | None:
         return self._models.get(model_name)
