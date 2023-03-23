@@ -2,7 +2,7 @@
 authors = [
     { name = "Toby Devlin", email = "toby@tobydevlin.com" },
 ]
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.9,<4.0"
 name = "pypelines"
 description = ""
 readme = "README.md"
