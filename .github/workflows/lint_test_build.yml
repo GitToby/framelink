@@ -2,16 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  release:
+    types: [ published ]
 
 jobs:
   lint_build_test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python_version: ['3.8','3.9','3.10','3.11','3.8',]
+        python_version: [ '3.8','3.9','3.10','3.11','3.8', ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -30,3 +29,25 @@ jobs:
         run: pytest
       - name: Build application
         run: python -m build .
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: build
+          path: dist/
+
+  release:
+    needs: [ lint_build_test ]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Setup python ${{ matrix.python_version }}
+        uses: actions/setup-python@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: build
+      - name: Publish a Python distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/
