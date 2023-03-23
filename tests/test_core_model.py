@@ -4,46 +4,46 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from pypelines.core import Pypeline
+from framelink.core import FramelinkPipeline
 
 root = Path(__file__)
 data_ = root.parent.parent.parent / "data"
 
 
 @pytest.fixture
-def pypeline():
-    return Pypeline()
+def pipeline():
+    return FramelinkPipeline()
 
 
-def test_model_registration(pypeline):
-    @pypeline.model()
-    def src_frame(_: Pypeline) -> pl.LazyFrame:
+def test_model_registration(pipeline):
+    @pipeline.model()
+    def src_frame(_: FramelinkPipeline) -> pl.LazyFrame:
         """
         Im a docstring!
         """
         return pl.LazyFrame()
 
     # pypeline registration
-    assert "src_frame" in pypeline.model_names
-    assert src_frame in pypeline.keys()
+    assert "src_frame" in pipeline.model_names
+    assert src_frame in pipeline.keys()
 
-    src_frame_model = pypeline[src_frame]
+    src_frame_model = pipeline[src_frame]
     assert src_frame_model.name == "src_frame"
     assert src_frame_model.call_count == 0
 
 
-def test_model_linking_linear(pypeline):
-    @pypeline.model()
-    def src_frame(_: Pypeline) -> pd.DataFrame:
+def test_model_linking_linear(pipeline):
+    @pipeline.model()
+    def src_frame(_: FramelinkPipeline) -> pd.DataFrame:
         return pd.DataFrame()
 
-    @pypeline.model()
-    def model_1(ctx: Pypeline) -> pd.DataFrame:
+    @pipeline.model()
+    def model_1(ctx: FramelinkPipeline) -> pd.DataFrame:
         df_out = ctx.ref(src_frame).head()
         return df_out
 
-    assert len(pypeline) == 2
-    assert pypeline.get(
+    assert len(pipeline) == 2
+    assert pipeline.get(
         model_1,
     )
 

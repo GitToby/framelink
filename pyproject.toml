@@ -3,7 +3,7 @@ authors = [
     { name = "Toby Devlin", email = "toby@tobydevlin.com" },
 ]
 requires-python = ">=3.9,<4.0"
-name = "pypelines"
+name = "framelink"
 description = ""
 readme = "README.md"
 dynamic = ["version"]
@@ -27,13 +27,13 @@ dev = [
 ]
 
 [project.urls]
-github = "https://github.com/GitToby/pypelines"
+github = "https://github.com/GitToby/framelink"
 
 [build-system]
 requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 
 [tool.setuptools_scm]
-write_to = "src/pypelines/__version__.py"
+write_to = "src/framelink/__version__.py"
 
 [tool.ruff]
 # Enable Pyflakes `E` and `F` codes by default.
