@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Generic, Iterator, Mapping, TypeVar
+from typing import Callable, Generic, Iterator, Mapping, Optional, TypeVar
 
 import networkx as nx
 import polars as pl
@@ -33,7 +33,7 @@ class _Model(Generic[FRAME]):
         return name__
 
     @property
-    def docstring(self) -> str | None:
+    def docstring(self) -> Optional[str]:
         doc__ = self._callable.__doc__
         return doc__.strip() if doc__ else None
 
