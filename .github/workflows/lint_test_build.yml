@@ -38,23 +38,22 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: dist
+          name: dist-py${{ matrix.python_version }}
           path: dist/
 
   release:
     needs: [ lint_build_test ]
     runs-on: ubuntu-latest
-    #    if: github.event_name == 'release'
+    if: github.event_name == 'release'
     steps:
       - name: Setup python ${{ matrix.python_version }}
         uses: actions/setup-python@v4
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          name: dist
+          name: dist-py3.11 # question: is this bad with just 3.11?
           path: dist/
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          repository-url: https://test.pypi.org/legacy/
