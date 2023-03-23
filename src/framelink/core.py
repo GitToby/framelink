@@ -10,7 +10,7 @@ import polars as pl
 
 
 @dataclass
-class PypelineSettings:
+class FramelinkSettings:
     persist_models = True
     persist_models_dir = Path(__file__).parent.parent / "data"
 
@@ -54,12 +54,12 @@ class _Model(Generic[FRAME]):
     def dependencies(self) -> tuple[float, ...]:
         return self.graph_ref.successors(self)
 
-    def build(self, ctx: "Pypeline") -> FRAME:
+    def build(self, ctx: "FramelinkPipeline") -> FRAME:
         return self(ctx)
 
     # todo: make async?
     @lru_cache
-    def __call__(self, ctx: "Pypeline") -> FRAME:
+    def __call__(self, ctx: "FramelinkPipeline") -> FRAME:
         start_time = time.perf_counter()
         res = self._callable(ctx)
         self.call_perf += (time.perf_counter() - start_time,)
@@ -75,11 +75,11 @@ class _Model(Generic[FRAME]):
         return hash(self.__key())
 
 
-class Pypeline(Mapping, Generic[FRAME]):
+class FramelinkPipeline(Mapping, Generic[FRAME]):
     _models: dict["PYPE_MODEL", _Model]
     graph: nx.DiGraph
 
-    def __init__(self, settings: PypelineSettings = PypelineSettings()):
+    def __init__(self, settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
         self._models = dict()
         self.graph = nx.DiGraph()
@@ -122,10 +122,10 @@ class Pypeline(Mapping, Generic[FRAME]):
 
         Example:
         >>> import pandas as pd
-        >>> def my_model_1(_: Pypeline) -> pd.DataFrame:
+        >>> def my_model_1(_: FramelinkPipeline) -> pd.DataFrame:
         >>>     return pd.read_csv("path.to/cdv")
         >>>
-        >>> def my_model_2(ctx: Pypeline) -> pd.DataFrame:
+        >>> def my_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         >>>     return ctx.ref(my_model_1).head()
         """
         try:
@@ -141,4 +141,4 @@ class Pypeline(Mapping, Generic[FRAME]):
         return self.ref(model_name)
 
 
-PYPE_MODEL = Callable[[Pypeline], FRAME]
+PYPE_MODEL = Callable[[FramelinkPipeline], FRAME]
