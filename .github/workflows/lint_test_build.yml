@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  push:
+  pull_request:
   release:
     types: [ published ]
 
@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python_version: ['3.9','3.10','3.11']
+        python_version: [ '3.9','3.10','3.11' ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup python ${{ matrix.python_version }}
         uses: actions/setup-python@v4
         with:
@@ -26,11 +26,18 @@ jobs:
       - name: ruff
         run: ruff check .
       - name: Run tests
-        run: pytest
+        run: pytest --cov src --cov-report xml --cov-report term
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
+          verbose: true
       - name: Build application
         run: python -m build .
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: build
           path: dist/
@@ -38,12 +45,12 @@ jobs:
   release:
     needs: [ lint_build_test ]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    #    if: github.event_name == 'release'
     steps:
       - name: Setup python ${{ matrix.python_version }}
         uses: actions/setup-python@v4
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: build
       - name: Publish a Python distribution to PyPI

@@ -8,3 +8,6 @@ data
 /build/
 # this is dynamic
 /src/pypelines/__version__.py
+/.coverage
+/coverage.xml
+/src/pypelines.egg-info/
