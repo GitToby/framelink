@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  release:
+    types: [ published ]
+
+jobs:
+  lint_build_test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python_version: [ '3.9','3.10','3.11' ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Setup python ${{ matrix.python_version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install .[dev]
+      - name: black
+        run: black . --check
+      - name: ruff
+        run: ruff check .
+      - name: Run tests
+        run: pytest --cov src --cov-report xml --cov-report term
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          verbose: true
+      - name: Build application
+        run: python -m build .
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-py${{ matrix.python_version }}
+          path: dist/
+
+  release:
+    needs: [ lint_build_test ]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Setup python ${{ matrix.python_version }}
+        uses: actions/setup-python@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist-py3.11 # question: is this bad with just 3.11?
+          path: dist/
+      - name: Publish a Python distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
