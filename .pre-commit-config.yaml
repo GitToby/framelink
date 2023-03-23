@@ -7,14 +7,6 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
 
-  - repo: https://github.com/python-poetry/poetry
-    rev: '1.3.1'
-    hooks:
-      - id: poetry-check
-      - id: poetry-lock
-      - id: poetry-export
-        args: [ "-f", "requirements.txt", "--with", "dev", "-o", "requirements.txt" ]
-
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: 'v0.0.249'
     hooks:
@@ -27,8 +19,7 @@ repos:
       - id: black
         types: [ "python" ]
 
-#  - repo: https://github.com/pre-commit/mirrors-mypy
-#    rev: 'v1.0.1'
-#    hooks:
-#      - id: mypy
-#        args: ["src"]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v1.0.1'
+    hooks:
+      - id: mypy

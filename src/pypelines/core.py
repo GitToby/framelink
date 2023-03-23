@@ -3,16 +3,10 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Callable, Generic, Iterator, Mapping, TypeVar
 
 import networkx as nx
-import pandas as pd
 import polars as pl
-
-FRAME = TypeVar("FRAME", pl.DataFrame, pl.LazyFrame, pd.DataFrame)
-
-
-## sd
 
 
 @dataclass
@@ -21,23 +15,32 @@ class PypelineSettings:
     persist_models_dir = Path(__file__).parent.parent / "data"
 
 
-@dataclass
-class _Model:
+FRAME = TypeVar("FRAME", pl.DataFrame, pl.DataFrame, pl.LazyFrame)
+
+
+class _Model(Generic[FRAME]):
     _callable: "PYPE_MODEL"
+    graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
+
+    def __init__(self, model_func: "PYPE_MODEL", graph: nx.DiGraph):
+        self._callable = model_func
+        self.graph_ref = graph
 
     @property
     def name(self) -> str:
-        return self._callable.__name__
+        name__ = self._callable.__name__
+        return name__
 
     @property
-    def docs(self) -> str | None:
+    def docstring(self) -> str | None:
         doc__ = self._callable.__doc__
         return doc__.strip() if doc__ else None
 
     @property
     def source(self) -> str:
-        return inspect.getsource(self._callable)
+        source__ = inspect.getsource(self._callable)
+        return source__.strip()
 
     @property
     def call_count(self) -> int:
@@ -47,9 +50,16 @@ class _Model:
     def perf_stats(self) -> tuple[float, ...]:
         return self.call_perf
 
+    @property
+    def dependencies(self) -> tuple[float, ...]:
+        return self.graph_ref.successors(self)
+
+    def build(self, ctx: "Pypeline") -> FRAME:
+        return self(ctx)
+
     # todo: make async?
     @lru_cache
-    def call(self, ctx: "Pypeline") -> FRAME:
+    def __call__(self, ctx: "Pypeline") -> FRAME:
         start_time = time.perf_counter()
         res = self._callable(ctx)
         self.call_perf += (time.perf_counter() - start_time,)
@@ -65,38 +75,69 @@ class _Model:
         return hash(self.__key())
 
 
-class Pypeline:
-    _models: dict[str, _Model] = dict()
-    _graph: nx.DiGraph = nx.DiGraph()
+class Pypeline(Mapping, Generic[FRAME]):
+    _models: dict["PYPE_MODEL", _Model]
+    graph: nx.DiGraph
 
     def __init__(self, settings: PypelineSettings = PypelineSettings()):
+        super().__init__()
+        self._models = dict()
+        self.graph = nx.DiGraph()
         self.settings = settings
 
-    def add_model(self, func: "PYPE_MODEL"):
-        # todo: add a metadata obj with implied schema?
-        m = _Model(func)
-        self._models[m.name] = m
-        self._graph.add_node(m)
+    @property
+    def model_names(self) -> list[str]:
+        return sorted(m.name for m in self.keys())
 
-        # todo, scan node & add edges
+    def model(self, *args, **kwargs) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
+        """
+        Annotation to add a method to the pypeline
+        """
 
-    def get(self, model_name) -> _Model | None:
-        return self._models.get(model_name)
+        def _decorator(func: "PYPE_MODEL") -> "PYPE_MODEL":
+            m = _Model(func, self.graph)
+            self._models[func] = m
+            return func
 
-    def __getitem__(self, item):
-        return self.get(item)
+        return _decorator
 
-    def select(self, term) -> _Model | None:
-        # todo, add dbt syntax here
-        return self.get(term)
+    def __getitem__(self, __k: "PYPE_MODEL") -> _Model:
+        item = self._models.get(__k)
+        if item:
+            return item
+        else:
+            raise KeyError(
+                f"Could not find model {__k.__name__} registered in this pypeline"
+            )
 
-    def ref(self, model_name: str) -> FRAME:
-        model = self.get(model_name)
-        assert model, "no model found"
-        model_res = model.call(self)
-        return model_res
+    def __len__(self) -> int:
+        return len(self._models.keys())
 
-    def build(self, model_name: str) -> FRAME:
+    def __iter__(self) -> Iterator[_Model]:
+        return (self[k] for k in self._models.keys())
+
+    def ref(self, model: "PYPE_MODEL") -> FRAME:
+        """
+        ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
+
+        Example:
+        >>> import pandas as pd
+        >>> def my_model_1(_: Pypeline) -> pd.DataFrame:
+        >>>     return pd.read_csv("path.to/cdv")
+        >>>
+        >>> def my_model_2(ctx: Pypeline) -> pd.DataFrame:
+        >>>     return ctx.ref(my_model_1).head()
+        """
+        try:
+            model_wrapper: _Model = self[model]
+            return model_wrapper.build(self)
+        except KeyError as ke:
+            raise KeyError() from ke
+
+    def build(self, model_name: "PYPE_MODEL") -> FRAME:
+        """
+        Building models is just proxied through to ref. Each build command should build only the given node in the graph
+        """
         return self.ref(model_name)
 
 

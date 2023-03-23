@@ -4,3 +4,7 @@
 data
 !/data/divy_trips_limited.csv
 .idea
+/dist/
+/build/
+# this is dynamic
+/src/pypelines/__version__.py

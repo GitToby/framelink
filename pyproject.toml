@@ -1,23 +1,37 @@
-[tool.poetry]
+[project]
+authors = [
+    { name = "Toby Devlin", email = "toby@tobydevlin.com" },
+]
+requires-python = ">=3.10,<4.0"
 name = "pypelines"
-version = "0.0.1"
 description = ""
-authors = ["Toby Devlin <toby@tobydevlin.com>"]
 readme = "README.md"
+dynamic = ["version"]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-#todo: move to optional
-pandas = "^1.5.3"
-polars = "^0.16.7"
-networkx = "^3.0"
+dependencies = [
+    "pandas<2.0.0,>=1.5.3",
+    "polars<1.0.0,>=0.16.7",
+    "networkx<4.0,>=3.0",
+    "openlineage-python>=0.21.1",
+    "setuptools-scm>=7.1.0",
+]
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.1.1",
+    "pytest>=7.2.2",
+    "pre-commit>=3.2.0",
+    "ruff>=0.0.258",
+    "build>=0.10.0",
+]
 
+[project.urls]
+github = "https://github.com/GitToby/pypelines"
 
-[tool.poetry.group.dev.dependencies]
-mypy = "^1.0.1"
-pytest = "^7.2.1"
-pre-commit = "^3.0.4"
-ruff = "^0.0.249"
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+
+[tool.setuptools_scm]
+write_to = "src/pypelines/__version__.py"
 
 [tool.ruff]
 # Enable Pyflakes `E` and `F` codes by default.
@@ -33,6 +47,4 @@ max-complexity = 10
 [tool.mypy]
 ignore_missing_imports = true
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.pdm]
