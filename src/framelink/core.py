@@ -11,7 +11,8 @@ import polars as pl
 
 @dataclass
 class FramelinkSettings:
-    """Settings to be applied by the  """
+    """Settings to be applied by the"""
+
     name: str = "default"
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
@@ -21,6 +22,7 @@ FRAME = TypeVar("FRAME", pl.DataFrame, pl.DataFrame, pl.LazyFrame)
 
 class _Model(Generic[FRAME]):
     """ """
+
     _callable: "PYPE_MODEL"
     graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
@@ -31,7 +33,7 @@ class _Model(Generic[FRAME]):
             graph: nx.DiGraph,
             *,
             persist_after_run: bool = False,
-            cache_result: bool = True
+            cache_result: bool = True,
     ):
         # These are more "model settings"
         self.persist_after_run = persist_after_run
@@ -70,7 +72,7 @@ class _Model(Generic[FRAME]):
 
     @property
     def call_count(self) -> int:
-        """ """
+        """a"""
         return len(self.call_perf)
 
     @property
@@ -86,7 +88,7 @@ class _Model(Generic[FRAME]):
     def build(self, ctx: "FramelinkPipeline") -> FRAME:
         """
 
-        :param ctx: "FramelinkPipeline": 
+        :param ctx: "FramelinkPipeline":
 
         """
         return self(ctx)
@@ -117,6 +119,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
 
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
     """
+
     _models: dict["PYPE_MODEL", _Model]
     graph: nx.DiGraph
 
@@ -134,12 +137,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         """Return a list of model names registered to this pipeline"""
         return sorted(m.name for m in self.keys())
 
-    def model(
-            self,
-            *,
-            persist_after_run=False,
-            cache_result=True
-    ) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
+    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
         """Annotation to register a model to the pypeline.
 
         :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
@@ -152,7 +150,12 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
 
             :param func: "PYPE_MODEL":
             """
-            m = _Model(func, self.graph, persist_after_run=persist_after_run, cache_result=cache_result)
+            m = _Model(
+                func,
+                self.graph,
+                persist_after_run=persist_after_run,
+                cache_result=cache_result,
+            )
             self._models[func] = m
             return func
 
@@ -163,9 +166,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         if item:
             return item
         else:
-            raise KeyError(
-                f"Could not find model {__k.__name__} registered in this pypeline"
-            )
+            raise KeyError(f"Could not find model {__k.__name__} registered in this pypeline")
 
     def __len__(self) -> int:
         return len(self._models.keys())
