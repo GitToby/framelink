@@ -10,6 +10,13 @@ below for future goals of the project.
 pip install framelink
 ```
 
+## Goals
+
+Framelink should provide a way for collaborating teams to write python or SQL models to see their data flow easily and get the a whole load of stuff for free!
+
+- **Simple to write**, writing models should be no harder than a function implementation but provide a dependancy tree, schemas & model metadata.
+- **Simple to run**, Writing models should be agnostic of running models, once the models are written execution wrappers with diagnostics, tracing & liniage should be easy to derive for the execution platform any team is running without having any special requirments for running locally. 
+
 ## Concepts
 
 - A **Pipeline** is a DAG of _Models_ that can be executed in a particular way.
