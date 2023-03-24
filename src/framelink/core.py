@@ -9,10 +9,10 @@ import networkx as nx
 import polars as pl
 
 
-@dataclass()
+@dataclass
 class FramelinkSettings:
+    """Settings to be applied by the  """
     name: str = "default"
-    persist_models: bool = True
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
 
@@ -20,6 +20,7 @@ FRAME = TypeVar("FRAME", pl.DataFrame, pl.DataFrame, pl.LazyFrame)
 
 
 class _Model(Generic[FRAME]):
+    """ """
     _callable: "PYPE_MODEL"
     graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
@@ -47,32 +48,43 @@ class _Model(Generic[FRAME]):
 
     @property
     def name(self) -> str:
+        """ """
         name__ = self._callable.__name__
         return name__
 
     @property
     def docstring(self) -> Optional[str]:
+        """ """
         doc__ = self._callable.__doc__
         return doc__.strip() if doc__ else None
 
     @property
     def source(self) -> str:
+        """ """
         source__ = inspect.getsource(self._callable)
         return source__.strip()
 
     @property
     def call_count(self) -> int:
+        """ """
         return len(self.call_perf)
 
     @property
     def perf_stats(self) -> tuple[float, ...]:
+        """ """
         return self.call_perf
 
     @property
     def dependencies(self) -> tuple[float, ...]:
+        """ """
         return self.graph_ref.successors(self)
 
     def build(self, ctx: "FramelinkPipeline") -> FRAME:
+        """
+
+        :param ctx: "FramelinkPipeline": 
+
+        """
         return self(ctx)
 
     # todo: make async?
@@ -80,9 +92,9 @@ class _Model(Generic[FRAME]):
         start_time = time.perf_counter()
         res = self._callable(ctx)
         self.call_perf += (time.perf_counter() - start_time,)
-        # settings = ctx.settings
-        # if settings.persist_models:
-        #     res.to_csv(settings.persist_models_dir / f"{self.name}.csv")
+        if self.persist_after_run:
+            out_dir = ctx.settings.persist_models_dir
+            res.to_csv(out_dir / f"{self.name}.csv")
         return res
 
     def __key(self) -> tuple[str, str, bool]:
@@ -97,6 +109,10 @@ class _Model(Generic[FRAME]):
 
 
 class FramelinkPipeline(Mapping, Generic[FRAME]):
+    """The core class for building DAGs of models and producing links of the results.
+
+    Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
+    """
     _models: dict["PYPE_MODEL", _Model]
     graph: nx.DiGraph
 
@@ -108,6 +124,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
 
     @property
     def model_names(self) -> list[str]:
+        """Return a list of model names registered to this pipeline"""
         return sorted(m.name for m in self.keys())
 
     def model(
@@ -116,12 +133,19 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
             persist_after_run=False,
             cache_result=True
     ) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
-        """
-        Annotation to add a method to the pypeline
+        """Annotation to register a model to the pypeline.
+
+        :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
+            defined in the :FramelinkSettings: (Default value = False)
+        :param cache_result:  (Default value = True)
         """
 
         def _decorator(func: "PYPE_MODEL") -> "PYPE_MODEL":
-            m = _Model(func, self.graph, persist_after_run=persist_after_run)
+            """Internal wrapping of the model function to produce the metadata about the model.
+
+            :param func: "PYPE_MODEL":
+            """
+            m = _Model(func, self.graph, persist_after_run=persist_after_run, cache_result=cache_result)
             self._models[func] = m
             return func
 
@@ -143,8 +167,9 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         return (self[k] for k in self._models.keys())
 
     def ref(self, model: "PYPE_MODEL") -> FRAME:
-        """
-        ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
+        """ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
+
+        :param model: "PYPE_MODEL": The model function whos output you want to use.
 
         Example:
         >>> import pandas as pd
@@ -161,8 +186,10 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
             raise KeyError() from ke
 
     def build(self, model_name: "PYPE_MODEL") -> FRAME:
-        """
-        Building models is just proxied through to ref. Each build command should build only the given node in the graph
+        """Building models is just proxied through to ref. Each build command should build only the given node in the
+         graph up to the nearest cache or persisted cache.
+
+        :param model_name: "PYPE_MODEL": the model to build in the context of this pipelin.
         """
         return self.ref(model_name)
 

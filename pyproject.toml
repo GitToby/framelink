@@ -25,6 +25,7 @@ dev = [
     "ruff>=0.0.258",
     "build>=0.10.0",
     "black>=23.1.0",
+    "pyment>=0.3.3",
 ]
 
 [project.urls]

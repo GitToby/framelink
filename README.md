@@ -19,15 +19,22 @@ pip install framelink
 ## Example
 
 ```python
+import os
+from pathlib import Path
+
 import pandas as pd
 import polars as pl
 
-from framelink.core import FramelinkPipeline
+from framelink.core import FramelinkPipeline, FramelinkSettings
+
+settings = FramelinkSettings(
+    persist_models_dir=Path(os.getcwd()) / "data"
+)
 
 pipeline = FramelinkPipeline()
 
 
-@pipeline.model()
+@pipeline.model(cache_result=True)
 def src_frame_1(_: FramelinkPipeline) -> pd.DataFrame:
     return pd.DataFrame(data={
         "name": ["amy", "peter"],
@@ -35,7 +42,7 @@ def src_frame_1(_: FramelinkPipeline) -> pd.DataFrame:
     })
 
 
-@pipeline.model()
+@pipeline.model(cache_result=False)
 def src_frame_2(_: FramelinkPipeline) -> pd.DataFrame:
     return pd.DataFrame(data={
         "name": ["amy", "peter", "helen"],
@@ -43,7 +50,7 @@ def src_frame_2(_: FramelinkPipeline) -> pd.DataFrame:
     })
 
 
-@pipeline.model()
+@pipeline.model(persist_after_run=True)
 def merge_model(ctx: FramelinkPipeline) -> pl.DataFrame:
     res_1 = ctx.ref(src_frame_1)
     res_2 = ctx.ref(src_frame_2)

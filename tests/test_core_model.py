@@ -79,3 +79,35 @@ def test_model_linking_linear(pipeline):
 # get = pypeline["model_1"]
 # assert get
 # print()
+
+
+def test_persistance():
+    pass
+
+
+def test_cacheing_on():
+    pass
+
+
+def test_cacheing_off():
+    pass
+
+
+def test_override_cacheing():
+    pass
+
+
+def test_merge_multiple_FramelinkPipelines():
+    pass
+
+
+def test_model_links():
+    pass
+
+
+def test_model_run_to_nearest_cache():
+    pass
+
+
+def test_model_run_downstream():
+    pass
