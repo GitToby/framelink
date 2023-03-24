@@ -9,10 +9,11 @@ import networkx as nx
 import polars as pl
 
 
-@dataclass
+@dataclass()
 class FramelinkSettings:
-    persist_models = True
-    persist_models_dir = Path(__file__).parent.parent / "data"
+    name: str = "default"
+    persist_models: bool = True
+    persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
 
 FRAME = TypeVar("FRAME", pl.DataFrame, pl.DataFrame, pl.LazyFrame)
@@ -23,8 +24,25 @@ class _Model(Generic[FRAME]):
     graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
 
-    def __init__(self, model_func: "PYPE_MODEL", graph: nx.DiGraph):
-        self._callable = model_func
+    def __init__(
+            self,
+            model_func: "PYPE_MODEL",
+            graph: nx.DiGraph,
+            *,
+            persist_after_run: bool = False,
+            cache_result: bool = True
+    ):
+        # These are more "model settings"
+        self.persist_after_run = persist_after_run
+        self.cache_result = cache_result
+
+        # question: is cache strategy right?
+        if self.cache_result:
+            self._callable = lru_cache()(model_func)
+        else:
+            self._callable = model_func
+
+        # These are the core attributes of the Model
         self.graph_ref = graph
 
     @property
@@ -58,7 +76,6 @@ class _Model(Generic[FRAME]):
         return self(ctx)
 
     # todo: make async?
-    @lru_cache
     def __call__(self, ctx: "FramelinkPipeline") -> FRAME:
         start_time = time.perf_counter()
         res = self._callable(ctx)
@@ -68,8 +85,12 @@ class _Model(Generic[FRAME]):
         #     res.to_csv(settings.persist_models_dir / f"{self.name}.csv")
         return res
 
-    def __key(self) -> tuple[str, str]:
-        return self.name, self.source
+    def __key(self) -> tuple[str, str, bool]:
+        """
+        The uniqueness of a Model should be defined as its config and execution. This is used to determine the cache
+        settings for the model when it is run
+        """
+        return self.name, self.source, self.persist_after_run
 
     def __hash__(self) -> int:
         return hash(self.__key())
@@ -89,13 +110,18 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
     def model_names(self) -> list[str]:
         return sorted(m.name for m in self.keys())
 
-    def model(self, *args, **kwargs) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
+    def model(
+            self,
+            *,
+            persist_after_run=False,
+            cache_result=True
+    ) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
         """
         Annotation to add a method to the pypeline
         """
 
         def _decorator(func: "PYPE_MODEL") -> "PYPE_MODEL":
-            m = _Model(func, self.graph)
+            m = _Model(func, self.graph, persist_after_run=persist_after_run)
             self._models[func] = m
             return func
 
@@ -123,7 +149,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         Example:
         >>> import pandas as pd
         >>> def my_model_1(_: FramelinkPipeline) -> pd.DataFrame:
-        >>>     return pd.read_csv("path.to/cdv")
+        >>>     return pd.read_csv("path/to/file.csv")
         >>>
         >>> def my_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         >>>     return ctx.ref(my_model_1).head()
@@ -139,6 +165,18 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         Building models is just proxied through to ref. Each build command should build only the given node in the graph
         """
         return self.ref(model_name)
+
+    def __key(self) -> tuple[int, ...]:
+        """
+        The state of a pypeline should be the aggregation settings that determine the way models should behave.
+
+        When we cache a model frame we need to hash the context for its run, which links to settings it should
+        take while building.
+        """
+        return tuple(hash(m) for m in self._models.values())
+
+    def __hash__(self) -> int:
+        return hash(self.__key())
 
 
 PYPE_MODEL = Callable[[FramelinkPipeline], FRAME]
