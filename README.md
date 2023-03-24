@@ -31,7 +31,7 @@ settings = FramelinkSettings(
     persist_models_dir=Path(os.getcwd()) / "data"
 )
 
-pipeline = FramelinkPipeline()
+pipeline = FramelinkPipeline(settings)
 
 
 @pipeline.model(cache_result=True)

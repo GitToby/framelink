@@ -59,10 +59,14 @@ class _Model(Generic[FRAME]):
         return doc__.strip() if doc__ else None
 
     @property
-    def source(self) -> str:
+    def source(self) -> str | None:
         """ """
-        source__ = inspect.getsource(self._callable)
-        return source__.strip()
+        try:
+            source__ = inspect.getsource(self._callable)
+            source__ = source__.strip()
+        except OSError:
+            source__ = None
+        return source__
 
     @property
     def call_count(self) -> int:
@@ -97,7 +101,7 @@ class _Model(Generic[FRAME]):
             res.to_csv(out_dir / f"{self.name}.csv")
         return res
 
-    def __key(self) -> tuple[str, str, bool]:
+    def __key(self) -> tuple[str, str | None, bool]:
         """
         The uniqueness of a Model should be defined as its config and execution. This is used to determine the cache
         settings for the model when it is run
@@ -121,6 +125,9 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         self._models = dict()
         self.graph = nx.DiGraph()
         self.settings = settings
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} with {len(self)} models at {hex(id(self))}>"
 
     @property
     def model_names(self) -> list[str]:
