@@ -26,8 +26,8 @@ jobs:
         run: black . --check -v
       - name: ruff
         run: ruff check .
-      - name: Run tests
-        run: pytest --cov src/framelink --cov-report xml --cov-report term
+      - name: pytest
+        run: pytest --cov=framelink --cov-report=xml --cov-report=term
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         with:

@@ -53,4 +53,10 @@ target_versions = ['py38', 'py39', 'py310', 'py311']
 [tool.mypy]
 ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = [
+    "tests",
+]
+
 [tool.pdm]
