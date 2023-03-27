@@ -116,7 +116,7 @@ class FramelinkPipeline(Generic[FRAME]):
     """
 
     _model_link: dict["PYPE_MODEL", FramelinkModel]
-    _models: TopologicalSorter[FramelinkModel]
+    _models: TopologicalSorter
 
     def __init__(self, settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
