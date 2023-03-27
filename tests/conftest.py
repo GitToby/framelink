@@ -10,32 +10,38 @@ from framelink.core import FramelinkPipeline, PYPE_MODEL
 TEST_ROOT_DIR = Path(__file__).parent
 DATA_DIR = TEST_ROOT_DIR.parent.parent / "data"
 
+random.seed(0)
+
 
 @pytest.fixture
 def src_frame() -> PYPE_MODEL:
-    def inner(_: FramelinkPipeline):
+    def src_frame(_: FramelinkPipeline) -> pd.DataFrame:
         """
         Mock data frame for testing purposes
-        :return: mock data result
+        :return: mock data
         """
-        data = {'string_col': [random.choice(['apple', 'banana', 'cherry']) for _ in range(10)],
-                'uuid_col': [str(uuid.uuid4()) for _ in range(10)],
-                'int_col': [random.randint(0, 100) for _ in range(10)]}
+        n = 10
+        data = {
+            "id_col": list(range(n)),
+            "string_col": [random.choice(["apple", "banana", "cherry"]) for _ in range(n)],
+            "uuid_col": [str(uuid.uuid4()) for _ in range(n)],
+            "int_col": [random.randint(0, 100) for _ in range(n)],
+        }
         return pd.DataFrame(data)
 
-    return inner
+    return src_frame
 
 
 @pytest.fixture
-def empty_pipeline():
+def empty_framelink() -> FramelinkPipeline:
     return FramelinkPipeline()
 
 
 @pytest.fixture
-def initial_framelink(src_frame):
+def initial_framelink(src_frame) -> tuple[FramelinkPipeline, PYPE_MODEL]:
     """
     :return: pipeline with a src frame already attached
     """
-    pipeline = FramelinkPipeline()
-    pipeline.model()(src_frame)
-    return pipeline, src_frame
+    pipeline: FramelinkPipeline = FramelinkPipeline()
+    src_frame_model = pipeline.model()(src_frame)
+    return pipeline, src_frame_model

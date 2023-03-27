@@ -2,11 +2,9 @@ import inspect
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Callable, Generic, Iterator, Mapping, Optional, TypeVar
-
-import networkx as nx
-import polars as pl
+from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
 
 
 @dataclass
@@ -17,20 +15,20 @@ class FramelinkSettings:
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
 
-FRAME = TypeVar("FRAME", pl.DataFrame, pl.DataFrame, pl.LazyFrame)
+FRAME = TypeVar("FRAME")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
 
 
-class _Model(Generic[FRAME]):
+class FramelinkModel(Generic[FRAME]):
     """ """
 
     _callable: "PYPE_MODEL"
-    graph_ref: nx.DiGraph
+    graph_ref: TopologicalSorter
     call_perf: tuple[float, ...] = tuple()
 
     def __init__(
             self,
             model_func: "PYPE_MODEL",
-            graph: nx.DiGraph,
+            graph: TopologicalSorter,
             *,
             persist_after_run: bool = False,
             cache_result: bool = True,
@@ -47,6 +45,9 @@ class _Model(Generic[FRAME]):
 
         # These are the core attributes of the Model
         self.graph_ref = graph
+
+    def __name__(self):
+        return self._callable.__name__
 
     @property
     def name(self) -> str:
@@ -80,16 +81,10 @@ class _Model(Generic[FRAME]):
         """ """
         return self.call_perf
 
-    @property
-    def dependencies(self) -> tuple[float, ...]:
-        """ """
-        return self.graph_ref.successors(self)
-
     def build(self, ctx: "FramelinkPipeline") -> FRAME:
         """
-
-        :param ctx: "FramelinkPipeline":
-
+        Build the current model with the context of the pipeline.
+        :param ctx: "FramelinkPipeline": framelink pipeline context
         """
         return self(ctx)
 
@@ -114,19 +109,19 @@ class _Model(Generic[FRAME]):
         return hash(self.__key())
 
 
-class FramelinkPipeline(Mapping, Generic[FRAME]):
+class FramelinkPipeline(Generic[FRAME]):
     """The core class for building DAGs of models and producing links of the results.
 
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
     """
 
-    _models: dict["PYPE_MODEL", _Model]
-    graph: nx.DiGraph
+    _model_link: dict["PYPE_MODEL", FramelinkModel]
+    _models: TopologicalSorter[FramelinkModel]
 
     def __init__(self, settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
-        self._models = dict()
-        self.graph = nx.DiGraph()
+        self._model_link = dict()
+        self._models = TopologicalSorter()
         self.settings = settings
 
     def __repr__(self):
@@ -135,7 +130,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
     @property
     def model_names(self) -> list[str]:
         """Return a list of model names registered to this pipeline"""
-        return sorted(m.name for m in self.keys())
+        return sorted(m.name for m in self._model_link.values())
 
     def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
         """Annotation to register a model to the pypeline.
@@ -150,45 +145,54 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
 
             :param func: "PYPE_MODEL":
             """
-            m = _Model(
+
+            # todo: parse model and work out upstreams.
+            model_wrapper: FramelinkModel = FramelinkModel(
                 func,
-                self.graph,
+                self._models,
                 persist_after_run=persist_after_run,
                 cache_result=cache_result,
             )
-            self._models[func] = m
+            # we need to keep a ref to the underlying graph
+            self._model_link[func] = model_wrapper
+            self._models.add(model_wrapper)
             return func
 
         return _decorator
 
-    def __getitem__(self, __k: "PYPE_MODEL") -> _Model:
-        item = self._models.get(__k)
-        if item:
-            return item
-        else:
-            raise KeyError(f"Could not find model {__k.__name__} registered in this pypeline")
-
     def __len__(self) -> int:
-        return len(self._models.keys())
+        return len(self._model_link.keys())
 
-    def __iter__(self) -> Iterator[_Model]:
-        return (self[k] for k in self._models.keys())
+    def __iter__(self) -> Iterator[FramelinkModel]:
+        return self._model_link.values().__iter__()
 
+    def __contains__(self, item: Union[FramelinkModel, "PYPE_MODEL"]):
+        return item in self._model_link.keys() or item in self._model_link.values()
+
+    def get(self, model: "PYPE_MODEL") -> FramelinkModel:
+        return self._model_link[model]
+
+    # question: why does this not type check correctly on `FramelinkModel` model
     def ref(self, model: "PYPE_MODEL") -> FRAME:
         """ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
 
-        :param model: "PYPE_MODEL": The model function whos output you want to use.
+        :param model: _Model: The model function with output you want to use.
 
         Example:
         >>> import pandas as pd
+        >>>
+        >>> pipeline = FramelinkPipeline()
+        >>>
+        >>> @pipeline.model()
         >>> def my_model_1(_: FramelinkPipeline) -> pd.DataFrame:
         >>>     return pd.read_csv("path/to/file.csv")
         >>>
+        >>> @pipeline.model()
         >>> def my_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         >>>     return ctx.ref(my_model_1).head()
         """
         try:
-            model_wrapper: _Model = self[model]
+            model_wrapper = self.get(model)
             return model_wrapper.build(self)
         except KeyError as ke:
             raise KeyError(f"No key {model.__name__}") from ke
@@ -208,10 +212,10 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
         When we cache a model frame we need to hash the context for its run, which links to settings it should
         take while building.
         """
-        return tuple(hash(m) for m in self._models.values())
+        return tuple(hash(m) for m in self._model_link.values())
 
     def __hash__(self) -> int:
         return hash(self.__key())
 
 
-PYPE_MODEL = Callable[[FramelinkPipeline], FRAME]
+PYPE_MODEL = Callable[[FramelinkPipeline[FRAME]], FRAME]
