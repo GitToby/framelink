@@ -1,4 +1,5 @@
 import inspect
+import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -62,13 +63,10 @@ class FramelinkModel(Generic[FRAME]):
         return doc__.strip() if doc__ else None
 
     @property
-    def source(self) -> Optional[str]:
+    def source(self) -> str:
         """ """
-        try:
-            source__ = inspect.getsource(self._callable)
-            source__ = source__.strip()
-        except OSError:
-            source__ = None
+        source__ = inspect.getsource(self._callable)
+        source__ = source__.strip()
         return source__
 
     @property
@@ -115,7 +113,7 @@ class FramelinkPipeline(Generic[FRAME]):
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
     """
 
-    _model_link: dict["PYPE_MODEL", FramelinkModel]
+    _model_link: dict[Union["PYPE_MODEL", str], FramelinkModel]
     _models: TopologicalSorter
 
     def __init__(self, settings: FramelinkSettings = FramelinkSettings()):
@@ -126,6 +124,10 @@ class FramelinkPipeline(Generic[FRAME]):
 
     def __repr__(self):
         return f"<{self.__class__.__name__} with {len(self)} models at {hex(id(self))}>"
+
+    def prepare(self):
+        self._models.prepare()
+        return self._models
 
     @property
     def model_names(self) -> list[str]:
@@ -146,16 +148,26 @@ class FramelinkPipeline(Generic[FRAME]):
             :param func: "PYPE_MODEL":
             """
 
-            # todo: parse model and work out upstreams.
             model_wrapper: FramelinkModel = FramelinkModel(
                 func,
                 self._models,
                 persist_after_run=persist_after_run,
                 cache_result=cache_result,
             )
-            # we need to keep a ref to the underlying graph
+            # todo: parse model and work out upstreams.
+            # parse = ast.parse(model_wrapper.source)
+            # tmp = ast.dump(parse, indent=4)
+
+            pattern = r"ref\((.*?)\)"
+            matches = re.findall(pattern, model_wrapper.source)
+            matched_models = {name: self.get(name) for name in matches}
+            # we need to keep a ref to the underlying graph for ref()
+            # bit hacky - think this through wrt to access?
             self._model_link[func] = model_wrapper
-            self._models.add(model_wrapper)
+            self._model_link[model_wrapper.name] = model_wrapper
+
+            # this may end up with runtime errors rather than build errors
+            self._models.add(model_wrapper.name, *matched_models.keys())
             return func
 
         return _decorator

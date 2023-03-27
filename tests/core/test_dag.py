@@ -27,7 +27,25 @@ def test_model_link_dag(initial_framelink):
         src_2_blue = src_2.loc[src_2["colour_col"] == "blue", :]
         return src_2_blue
 
+    @pipeline.model()
+    def simple_src_1_filter(ctx: FramelinkPipeline) -> pd.DataFrame:
+        frame = ctx.ref(src_frame)
+        frame = frame.loc[:10]
+        return frame
+
+    @pipeline.model()
+    def simple_src_1_filter2(ctx: FramelinkPipeline) -> pd.DataFrame:
+        frame = ctx.ref(only_blue_records)
+        ctx.ref(simple_src_1_filter)
+        return frame
+
+    graph = pipeline.prepare()
+    while graph.is_active():
+        for i, node in enumerate(graph.get_ready()):
+            print(i, node)
+            graph.done(node)
     pipeline.build(only_blue_records)
+    pipeline.build(simple_src_1_filter)
 
 
 @pytest.mark.skip(reason="todo")
