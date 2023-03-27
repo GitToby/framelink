@@ -20,7 +20,7 @@ jobs:
           python-version: ${{ matrix.python_version }}
           cache: 'pip'
       - name: Install dependencies
-        run: pip install .[dev]
+        run: pip install .[ci]
       - name: black
         run: black . --check
       - name: ruff
