@@ -11,3 +11,4 @@ data
 /.coverage
 /coverage.xml
 /src/*.egg-info/
+*/.pytest_cache/

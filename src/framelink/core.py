@@ -72,7 +72,7 @@ class _Model(Generic[FRAME]):
 
     @property
     def call_count(self) -> int:
-        """a"""
+        """return the numer of times this model has been called"""
         return len(self.call_perf)
 
     @property
@@ -191,7 +191,7 @@ class FramelinkPipeline(Mapping, Generic[FRAME]):
             model_wrapper: _Model = self[model]
             return model_wrapper.build(self)
         except KeyError as ke:
-            raise KeyError() from ke
+            raise KeyError(f"No key {model.__name__}") from ke
 
     def build(self, model_name: "PYPE_MODEL") -> FRAME:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
