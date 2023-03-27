@@ -12,3 +12,5 @@ data
 /coverage.xml
 /src/*.egg-info/
 */.pytest_cache/
+/.pdm.toml
+/.vscode/settings.json
