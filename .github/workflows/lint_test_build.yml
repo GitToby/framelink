@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'pdm.lock'
       - name: Install dependencies
-        run: pip install .[ci]
+        run: pip install .[dev]
       - name: black
         run: black . --check -v
       - name: ruff

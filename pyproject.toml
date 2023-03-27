@@ -11,7 +11,7 @@ dynamic = ["version"]
 dependencies = [
 ]
 [project.optional-dependencies]
-ci = [
+dev = [
     "framelink",
     "openlineage-python>=0.21.1",
     "setuptools-scm>=7.1.0",
@@ -21,9 +21,7 @@ ci = [
     "ruff>=0.0.258",
     "black>=23.1.0",
     "build>=0.10.0",
-]
-dev = [
-    "framelink[dev]",
+    # more for testing and the like
     "pandas<2.0.0,>=1.5.3",
     "polars<1.0.0,>=0.16.7",
     "pre-commit>=3.2.0",
