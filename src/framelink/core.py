@@ -26,12 +26,12 @@ class FramelinkModel(Generic[FRAME]):
     call_perf: tuple[float, ...] = tuple()
 
     def __init__(
-            self,
-            model_func: "PYPE_MODEL",
-            graph: TopologicalSorter,
-            *,
-            persist_after_run: bool = False,
-            cache_result: bool = True,
+        self,
+        model_func: "PYPE_MODEL",
+        graph: TopologicalSorter,
+        *,
+        persist_after_run: bool = False,
+        cache_result: bool = True,
     ):
         # These are more "model settings"
         self.persist_after_run = persist_after_run

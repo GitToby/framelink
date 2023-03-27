@@ -82,6 +82,7 @@ def test_model_ref(initial_framelink):
         assert "model_tail" in str(e1.value)
 
     with pytest.raises(KeyError) as e2:
+
         @pipeline.model()
         def downstream_model(ctx: FramelinkPipeline):
             return ctx.ref(model_tail).head(2)

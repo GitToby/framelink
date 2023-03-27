@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pip install .[ci]
       - name: black
-        run: black . --check
+        run: black . --check -v
       - name: ruff
         run: ruff check .
       - name: Run tests
