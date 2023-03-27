@@ -62,7 +62,7 @@ class FramelinkModel(Generic[FRAME]):
         return doc__.strip() if doc__ else None
 
     @property
-    def source(self) -> str | None:
+    def source(self) -> Optional[str]:
         """ """
         try:
             source__ = inspect.getsource(self._callable)
@@ -98,7 +98,7 @@ class FramelinkModel(Generic[FRAME]):
             res.to_csv(out_dir / f"{self.name}.csv")
         return res
 
-    def __key(self) -> tuple[str, str | None, bool]:
+    def __key(self) -> tuple[str, Optional[str], bool]:
         """
         The uniqueness of a Model should be defined as its config and execution. This is used to determine the cache
         settings for the model when it is run
