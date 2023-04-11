@@ -1,6 +1,7 @@
 import random
 import uuid
 
+import networkx as nx
 import pandas as pd
 import pytest as pytest
 
@@ -39,13 +40,30 @@ def test_model_link_dag(initial_framelink):
         ctx.ref(simple_src_1_filter)
         return frame
 
-    graph = pipeline.prepare()
-    while graph.is_active():
-        for i, node in enumerate(graph.get_ready()):
-            print(i, node)
-            graph.done(node)
-    pipeline.build(only_blue_records)
-    pipeline.build(simple_src_1_filter)
+    assert nx.is_directed(pipeline.graph)
+    assert nx.is_directed_acyclic_graph(pipeline.graph)
+    assert src_model_2 in pipeline.get(only_blue_records).upstreams
+    assert simple_src_1_filter in pipeline.get(only_blue_records).downstreams
+    assert simple_src_1_filter2 in pipeline.get(only_blue_records).downstreams
+    assert simple_src_1_filter2 in pipeline.get(simple_src_1_filter).downstreams
+
+
+def test_deg_raises_error_on_premature_import(initial_framelink):
+    pipeline, _ = initial_framelink
+
+    with pytest.raises(KeyError) as e:
+
+        @pipeline.model()
+        def model_1(ctx: FramelinkPipeline):
+            m_2 = ctx.ref(model_2)
+            return m_2.head()
+
+        @pipeline.model()
+        def model_2(ctx: FramelinkPipeline):
+            m_1 = ctx.ref(model_1)
+            return m_1.head
+
+        assert "model_2" in e.value, "We should fail when trying to ref model_2 before import"
 
 
 @pytest.mark.skip(reason="todo")

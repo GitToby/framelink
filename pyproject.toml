@@ -9,6 +9,12 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    "networkx>=3.0",
+
+    # graphing
+    "matplotlib>=3.7.1",
+    "graphviz>=0.20.1",
+    "pydot>=1.4.2",
 ]
 [project.optional-dependencies]
 dev = [
@@ -27,6 +33,7 @@ dev = [
     "pre-commit>=3.2.0",
     "pyment>=0.3.3",
     "pyarrow>=11.0.0",
+    "jupyter>=1.0.0",
 ]
 
 [project.urls]

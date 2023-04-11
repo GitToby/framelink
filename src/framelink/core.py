@@ -1,18 +1,19 @@
 import inspect
+import logging
 import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
-from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
+
+import networkx as nx
 
 
 @dataclass
 class FramelinkSettings:
     """Settings to be applied by the"""
 
-    name: str = "default"
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
 
@@ -20,16 +21,22 @@ FRAME = TypeVar("FRAME")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFr
 
 
 class FramelinkModel(Generic[FRAME]):
-    """ """
+    """
+    A wrapper around a `PYPE_MODEL` that enables:
+     - visibility onto the model DAG
+     - cacheing of the model run
+     - monitoring of run performance
+     - adapters to run the model on various engines
+    """
 
     _callable: "PYPE_MODEL"
-    graph_ref: TopologicalSorter
+    _graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
 
     def __init__(
         self,
         model_func: "PYPE_MODEL",
-        graph: TopologicalSorter,
+        graph: nx.DiGraph,
         *,
         persist_after_run: bool = False,
         cache_result: bool = True,
@@ -45,16 +52,35 @@ class FramelinkModel(Generic[FRAME]):
             self._callable = model_func
 
         # These are the core attributes of the Model
-        self.graph_ref = graph
+        self._graph_ref = graph
+        self.log = logging.getLogger(f"{self.__class__}.{self.name}")
 
     def __name__(self):
         return self._callable.__name__
 
+    def __repr__(self):
+        return self.name
+
+    @property
+    def upstreams(self) -> set["FramelinkModel"]:
+        """
+        Pull this model from the graph and pull out all models are direct predecessors to this model.
+        :return: a set of models that this model depends on.
+        """
+        return set(self._graph_ref.predecessors(self))
+
+    @property
+    def downstreams(self) -> set["FramelinkModel"]:
+        """
+        Pull this model from the graph and pull out all models are direct sucessors to this model.
+        :return: a set of models that depend on this model.
+        """
+        return set(self._graph_ref.successors(self))
+
     @property
     def name(self) -> str:
-        """ """
-        name__ = self._callable.__name__
-        return name__
+        """Returns the models name"""
+        return self.__name__()
 
     @property
     def docstring(self) -> Optional[str]:
@@ -113,26 +139,38 @@ class FramelinkPipeline(Generic[FRAME]):
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
     """
 
-    _model_link: dict[Union["PYPE_MODEL", str], FramelinkModel]
-    _models: TopologicalSorter
+    _models: dict[Union[str], FramelinkModel]
+    graph: nx.DiGraph
 
-    def __init__(self, settings: FramelinkSettings = FramelinkSettings()):
+    def __init__(self, name: str = "default", settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
-        self._model_link = dict()
-        self._models = TopologicalSorter()
+        self._name = name
+        self._models = dict()
+        self.graph = nx.DiGraph()
         self.settings = settings
+        self.log = logging.getLogger()
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} with {len(self)} models at {hex(id(self))}>"
+        return f"<{self.name} with {len(self)} models at {hex(id(self))}>"
 
-    def prepare(self):
-        self._models.prepare()
-        return self._models
+    @property
+    def name(self) -> str:
+        """
+        Return a namespaced name of this pipeline
+        """
+        return f"{self.__class__.__name__}.{self._name}"
 
     @property
     def model_names(self) -> list[str]:
         """Return a list of model names registered to this pipeline"""
-        return sorted(m.name for m in self._model_link.values())
+        return sorted(m.name for m in self._models.values())
+
+    def graph_dot(self):
+        return nx.drawing.nx_pydot.to_pydot(self.graph)
+
+    def graph_plt(self):
+        pos = nx.multipartite_layout(self.graph)
+        return nx.draw_networkx(self.graph, pos)
 
     def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
         """Annotation to register a model to the pypeline.
@@ -150,39 +188,34 @@ class FramelinkPipeline(Generic[FRAME]):
 
             model_wrapper: FramelinkModel = FramelinkModel(
                 func,
-                self._models,
+                self.graph,
                 persist_after_run=persist_after_run,
                 cache_result=cache_result,
             )
-            # todo: parse model and work out upstreams.
-            # parse = ast.parse(model_wrapper.source)
-            # tmp = ast.dump(parse, indent=4)
 
-            pattern = r"ref\((.*?)\)"
+            # todo: brainstorm more new ways of doing this.
+            pattern = r"\.ref\((.*?)\)"
             matches = re.findall(pattern, model_wrapper.source)
-            matched_models = {name: self.get(name) for name in matches}
-            # we need to keep a ref to the underlying graph for ref()
-            # bit hacky - think this through wrt to access?
-            self._model_link[func] = model_wrapper
-            self._model_link[model_wrapper.name] = model_wrapper
+            matched_models = (self.get(name) for name in matches)
 
-            # this may end up with runtime errors rather than build errors
-            self._models.add(model_wrapper.name, *matched_models.keys())
+            # we need to keep a ref to the underlying graph so we can access the models when we ask for them via
+            # `ref()` or `build()`
+            self._models[model_wrapper.name] = model_wrapper
+
+            # calc max depth and add to the incoming node
+
+            # question: would adding just the ref (String) to the graph and then computing from there be better?
+            self.graph.add_node(model_wrapper)
+            upstream_edges = ((upstream_model, model_wrapper) for upstream_model in matched_models)
+            self.graph.add_edges_from(upstream_edges)
+
+            if not nx.is_directed_acyclic_graph(self.graph):
+                cycle = nx.find_cycle(self.graph, model_wrapper)
+                raise ValueError(f"{model_wrapper.name} has a loop: {cycle}")
+
             return func
 
         return _decorator
-
-    def __len__(self) -> int:
-        return len(self._model_link.keys())
-
-    def __iter__(self) -> Iterator[FramelinkModel]:
-        return self._model_link.values().__iter__()
-
-    def __contains__(self, item: Union[FramelinkModel, "PYPE_MODEL"]):
-        return item in self._model_link.keys() or item in self._model_link.values()
-
-    def get(self, model: "PYPE_MODEL") -> FramelinkModel:
-        return self._model_link[model]
 
     # question: why does this not type check correctly on `FramelinkModel` model
     def ref(self, model: "PYPE_MODEL") -> FRAME:
@@ -224,10 +257,38 @@ class FramelinkPipeline(Generic[FRAME]):
         When we cache a model frame we need to hash the context for its run, which links to settings it should
         take while building.
         """
-        return tuple(hash(m) for m in self._model_link.values())
+        return tuple(hash(m) for m in self._models.values())
 
     def __hash__(self) -> int:
         return hash(self.__key())
+
+    def __len__(self) -> int:
+        return len(self._models.keys())
+
+    def __iter__(self) -> Iterator[FramelinkModel]:
+        return self._models.values().__iter__()
+
+    def __contains__(self, item: Union[FramelinkModel, "PYPE_MODEL"]):
+        return item.__name__ in self._models.keys() or item in self._models.values()
+
+    def get(self, model: Union["PYPE_MODEL", str]) -> FramelinkModel:
+        """
+        Given the callable `PYPE_MODEL`, or the `PYPE_MODEL`s name, return the`FramelinkModel` that wraps it.
+
+
+        :param model: Model function or the model name (function name).
+        :return: The `FramelinkModel` that wraps the model.
+        """
+        if type(model) != str:
+            model = model.__name__
+
+        try:
+            return self._models[model]
+        except KeyError as k:
+            raise KeyError(
+                f"Could not locate the model '{model}' in the pipeline {self.name} models: {self.model_names}. "
+                "Have you registered it yet?"
+            ) from k
 
 
 PYPE_MODEL = Callable[[FramelinkPipeline[FRAME]], FRAME]
