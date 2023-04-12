@@ -5,12 +5,10 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Generic, Iterator, Optional, TYPE_CHECKING, TypeVar, Union
+from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
 
 import networkx as nx
-
-if TYPE_CHECKING:
-    import pydot
+import pydot
 
 
 @dataclass
@@ -183,6 +181,9 @@ class FramelinkPipeline(Generic[FRAME]):
         # pos = nx.multipartite_layout(self.graph)
         pos = nx.planar_layout(self.graph)
         return nx.draw_networkx(self.graph, pos)
+
+    def streamlit_register_models(self):
+        pass
 
     def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], FramelinkModel]:
         """Annotation to register a model to the pypeline.
