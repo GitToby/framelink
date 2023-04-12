@@ -5,9 +5,12 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
+from typing import Callable, Generic, Iterator, Optional, TYPE_CHECKING, TypeVar, Union
 
 import networkx as nx
+
+if TYPE_CHECKING:
+    import pydot
 
 
 @dataclass
@@ -166,11 +169,19 @@ class FramelinkPipeline(Generic[FRAME]):
         """Return a list of model names registered to this pipeline"""
         return sorted(m.name for m in self._models.values())
 
-    def graph_dot(self):
+    def graph_dot(self) -> pydot.Dot:
+        """
+        Using networkx and graphviz, create a DOT string representation of the model DAG.
+        """
         return nx.drawing.nx_pydot.to_pydot(self.graph)
 
     def graph_plt(self):
-        pos = nx.multipartite_layout(self.graph)
+        """
+        Using networkx and matplotlib create an image representation of the model DAG.
+        """
+        # question: is there a better graph layout
+        # pos = nx.multipartite_layout(self.graph)
+        pos = nx.planar_layout(self.graph)
         return nx.draw_networkx(self.graph, pos)
 
     def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], FramelinkModel]:

@@ -14,3 +14,4 @@ data
 **/*/.pytest_cache/
 /.pdm.toml
 /.vscode/settings.json
+/examples/.ipynb_checkpoints
