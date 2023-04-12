@@ -42,10 +42,10 @@ def test_model_link_dag(initial_framelink):
 
     assert nx.is_directed(pipeline.graph)
     assert nx.is_directed_acyclic_graph(pipeline.graph)
-    assert src_model_2 in pipeline.get(only_blue_records).upstreams
-    assert simple_src_1_filter in pipeline.get(only_blue_records).downstreams
-    assert simple_src_1_filter2 in pipeline.get(only_blue_records).downstreams
-    assert simple_src_1_filter2 in pipeline.get(simple_src_1_filter).downstreams
+    assert src_model_2 in only_blue_records.upstreams
+    assert simple_src_1_filter in src_frame.downstreams
+    assert simple_src_1_filter2 in only_blue_records.downstreams
+    assert simple_src_1_filter2 in simple_src_1_filter.downstreams
 
 
 def test_deg_raises_error_on_premature_import(initial_framelink):

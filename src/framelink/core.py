@@ -55,6 +55,7 @@ class FramelinkModel(Generic[FRAME]):
         self._graph_ref = graph
         self.log = logging.getLogger(f"{self.__class__}.{self.name}")
 
+    @property
     def __name__(self):
         return self._callable.__name__
 
@@ -80,7 +81,7 @@ class FramelinkModel(Generic[FRAME]):
     @property
     def name(self) -> str:
         """Returns the models name"""
-        return self.__name__()
+        return self.__name__
 
     @property
     def docstring(self) -> Optional[str]:
@@ -172,7 +173,7 @@ class FramelinkPipeline(Generic[FRAME]):
         pos = nx.multipartite_layout(self.graph)
         return nx.draw_networkx(self.graph, pos)
 
-    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], "PYPE_MODEL"]:
+    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], FramelinkModel]:
         """Annotation to register a model to the pypeline.
 
         :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
@@ -180,10 +181,11 @@ class FramelinkPipeline(Generic[FRAME]):
         :param cache_result:  (Default value = True)
         """
 
-        def _decorator(func: "PYPE_MODEL") -> "PYPE_MODEL":
+        def _decorator(func: "PYPE_MODEL") -> FramelinkModel:
             """Internal wrapping of the model function to produce the metadata about the model.
 
-            :param func: "PYPE_MODEL":
+            :param func: "PYPE_MODEL": the callable function that defines the model
+            :returns
             """
 
             model_wrapper: FramelinkModel = FramelinkModel(
@@ -213,16 +215,14 @@ class FramelinkPipeline(Generic[FRAME]):
                 cycle = nx.find_cycle(self.graph, model_wrapper)
                 raise ValueError(f"{model_wrapper.name} has a loop: {cycle}")
 
-            return func
+            return model_wrapper
 
         return _decorator
 
-    # question: why does this not type check correctly on `FramelinkModel` model
-    def ref(self, model: "PYPE_MODEL") -> FRAME:
+    def ref(self, model: "FRAMELINK_MODEL_REF") -> FRAME:
         """ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
 
         :param model: _Model: The model function with output you want to use.
-
         Example:
         >>> import pandas as pd
         >>>
@@ -240,13 +240,13 @@ class FramelinkPipeline(Generic[FRAME]):
             model_wrapper = self.get(model)
             return model_wrapper.build(self)
         except KeyError as ke:
-            raise KeyError(f"No key {model.__name__}") from ke
+            raise KeyError(f"No key {model}") from ke
 
-    def build(self, model_name: "PYPE_MODEL") -> FRAME:
+    def build(self, model_name: Union[str, FramelinkModel]) -> FRAME:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
          graph up to the nearest cache or persisted cache.
 
-        :param model_name: "PYPE_MODEL": the model to build in the context of this pipelin.
+        :param model_name: "PYPE_MODEL": the model to build in the context of this pipeline.
         """
         return self.ref(model_name)
 
@@ -271,16 +271,16 @@ class FramelinkPipeline(Generic[FRAME]):
     def __contains__(self, item: Union[FramelinkModel, "PYPE_MODEL"]):
         return item.__name__ in self._models.keys() or item in self._models.values()
 
-    def get(self, model: Union["PYPE_MODEL", str]) -> FramelinkModel:
+    def get(self, model: "FRAMELINK_MODEL_REF") -> FramelinkModel:
         """
-        Given the callable `PYPE_MODEL`, or the `PYPE_MODEL`s name, return the`FramelinkModel` that wraps it.
+        Given a `FramelinkModel`, or the model's name, return the`FramelinkModel`.
 
 
         :param model: Model function or the model name (function name).
-        :return: The `FramelinkModel` that wraps the model.
+        :returns: The `FramelinkModel` that wraps the model.
         """
         if type(model) != str:
-            model = model.__name__
+            model = model.__name__  # type: ignore
 
         try:
             return self._models[model]
@@ -292,3 +292,5 @@ class FramelinkPipeline(Generic[FRAME]):
 
 
 PYPE_MODEL = Callable[[FramelinkPipeline[FRAME]], FRAME]
+# question: why does this not type check correctly on `FramelinkModel | str` only?
+FRAMELINK_MODEL_REF = Union[FramelinkModel, str, PYPE_MODEL]

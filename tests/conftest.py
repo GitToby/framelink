@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from framelink.core import FramelinkPipeline, PYPE_MODEL
+from framelink.core import FramelinkModel, FramelinkPipeline, PYPE_MODEL
 
 TEST_ROOT_DIR = Path(__file__).parent
 DATA_DIR = TEST_ROOT_DIR.parent.parent / "data"
@@ -38,7 +38,7 @@ def empty_framelink() -> FramelinkPipeline:
 
 
 @pytest.fixture
-def initial_framelink(src_frame) -> tuple[FramelinkPipeline, PYPE_MODEL]:
+def initial_framelink(src_frame) -> tuple[FramelinkPipeline, FramelinkModel]:
     """
     :return: pipeline with a src frame already attached
     """

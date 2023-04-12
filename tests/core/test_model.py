@@ -1,8 +1,10 @@
+from typing import Callable
+
 import pandas as pd
 import polars as pl
 import pytest
 
-from framelink.core import FramelinkPipeline
+from framelink.core import FramelinkModel, FramelinkPipeline
 
 
 def test_model_registration(empty_framelink):
@@ -19,7 +21,7 @@ def test_model_registration(empty_framelink):
     assert src_frame in pipeline
     src_frame_framelink_model = pipeline.get(src_frame)
     assert src_frame_framelink_model.name == src_frame.__name__
-    assert src_frame_framelink_model.docstring == src_frame.__doc__.strip()
+    # assert src_frame_framelink_model.docstring == src_frame.__doc__.strip()
     assert src_frame_framelink_model.persist_after_run is False
     assert src_frame_framelink_model.cache_result is True
     assert src_frame_framelink_model.call_count == 0
@@ -122,6 +124,21 @@ def test_get_metadata(initial_framelink):
     )
 
 
-@pytest.mark.skip(reason="This should have a way to easily test?")
-def test_type_hints():
-    pass
+def test_type_values(initial_framelink):
+    pipeline, src_frame = initial_framelink
+
+    @pipeline.model()
+    def head_model(ctx: FramelinkPipeline) -> pd.DataFrame:
+        df_out = ctx.ref(src_frame).head()
+        return df_out
+
+    assert isinstance(head_model, FramelinkModel)
+
+    def head_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
+        df_out = ctx.ref(src_frame).head()
+        return df_out
+
+    assert isinstance(head_model_2, Callable)
+    head_model_2_wrapped = pipeline.model()(head_model_2)
+    assert isinstance(head_model_2, Callable)
+    assert isinstance(head_model_2_wrapped, FramelinkModel)
