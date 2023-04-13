@@ -18,25 +18,26 @@ class FramelinkSettings:
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
 
 
-FRAME = TypeVar("FRAME")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
+T = TypeVar("T")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
+F = Callable[["FramelinkPipeline"], T]  # the definition of one of the models users will write
 
 
-class FramelinkModel(Generic[FRAME]):
+class FramelinkModel(Generic[T]):
     """
-    A wrapper around a `PYPE_MODEL` that enables:
+    A wrapper around a callable model that enables:
      - visibility onto the model DAG
-     - cacheing of the model run
+     - caching of the model run
      - monitoring of run performance
      - adapters to run the model on various engines
     """
 
-    _callable: "PYPE_MODEL"
+    _callable: F[T]
     _graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
 
     def __init__(
         self,
-        model_func: "PYPE_MODEL",
+        model_func: F[T],
         graph: nx.DiGraph,
         *,
         persist_after_run: bool = False,
@@ -107,7 +108,7 @@ class FramelinkModel(Generic[FRAME]):
         """ """
         return self.call_perf
 
-    def build(self, ctx: "FramelinkPipeline") -> FRAME:
+    def build(self, ctx: "FramelinkPipeline") -> T:
         """
         Build the current model with the context of the pipeline.
         :param ctx: "FramelinkPipeline": framelink pipeline context
@@ -115,13 +116,10 @@ class FramelinkModel(Generic[FRAME]):
         return self(ctx)
 
     # todo: make async?
-    def __call__(self, ctx: "FramelinkPipeline") -> FRAME:
+    def __call__(self, ctx: "FramelinkPipeline") -> T:
         start_time = time.perf_counter()
         res = self._callable(ctx)
         self.call_perf += (time.perf_counter() - start_time,)
-        if self.persist_after_run:
-            out_dir = ctx.settings.persist_models_dir
-            res.to_csv(out_dir / f"{self.name}.csv")
         return res
 
     def __key(self) -> tuple[str, Optional[str], bool]:
@@ -135,13 +133,13 @@ class FramelinkModel(Generic[FRAME]):
         return hash(self.__key())
 
 
-class FramelinkPipeline(Generic[FRAME]):
+class FramelinkPipeline:
     """The core class for building DAGs of models and producing links of the results.
 
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
     """
 
-    _models: dict[Union[str], FramelinkModel]
+    _models: dict[str, FramelinkModel]
     graph: nx.DiGraph
 
     def __init__(self, name: str = "default", settings: FramelinkSettings = FramelinkSettings()):
@@ -185,7 +183,7 @@ class FramelinkPipeline(Generic[FRAME]):
     def streamlit_register_models(self):
         pass
 
-    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[["PYPE_MODEL"], FramelinkModel]:
+    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[[F[T]], FramelinkModel[T]]:
         """Annotation to register a model to the pypeline.
 
         :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
@@ -193,11 +191,11 @@ class FramelinkPipeline(Generic[FRAME]):
         :param cache_result:  (Default value = True)
         """
 
-        def _decorator(func: "PYPE_MODEL") -> FramelinkModel:
+        def _decorator(func: F[T]) -> FramelinkModel[T]:
             """Internal wrapping of the model function to produce the metadata about the model.
 
             :param func: "PYPE_MODEL": the callable function that defines the model
-            :returns
+            :returns: the wrapped model with all the extra pieces
             """
 
             model_wrapper: FramelinkModel = FramelinkModel(
@@ -231,7 +229,7 @@ class FramelinkPipeline(Generic[FRAME]):
 
         return _decorator
 
-    def ref(self, model: "FRAMELINK_MODEL_REF") -> FRAME:
+    def ref(self, model: FramelinkModel[T] | str) -> T:
         """ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
 
         :param model: _Model: The model function with output you want to use.
@@ -254,7 +252,7 @@ class FramelinkPipeline(Generic[FRAME]):
         except KeyError as ke:
             raise KeyError(f"No key {model}") from ke
 
-    def build(self, model_name: Union[str, FramelinkModel]) -> FRAME:
+    def build(self, model_name: FramelinkModel[T] | str) -> T:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
          graph up to the nearest cache or persisted cache.
 
@@ -280,10 +278,10 @@ class FramelinkPipeline(Generic[FRAME]):
     def __iter__(self) -> Iterator[FramelinkModel]:
         return self._models.values().__iter__()
 
-    def __contains__(self, item: Union[FramelinkModel, "PYPE_MODEL"]):
+    def __contains__(self, item: Union[FramelinkModel, F[T]]) -> bool:
         return item.__name__ in self._models.keys() or item in self._models.values()
 
-    def get(self, model: "FRAMELINK_MODEL_REF") -> FramelinkModel:
+    def get(self, model: FramelinkModel | str) -> FramelinkModel:
         """
         Given a `FramelinkModel`, or the model's name, return the`FramelinkModel`.
 
@@ -291,18 +289,13 @@ class FramelinkPipeline(Generic[FRAME]):
         :param model: Model function or the model name (function name).
         :returns: The `FramelinkModel` that wraps the model.
         """
-        if type(model) != str:
-            model = model.__name__  # type: ignore
+
+        model_name = model if type(model) == str else model.name  # type: ignore
 
         try:
-            return self._models[model]
+            return self._models[model_name]
         except KeyError as k:
             raise KeyError(
                 f"Could not locate the model '{model}' in the pipeline {self.name} models: {self.model_names}. "
                 "Have you registered it yet?"
             ) from k
-
-
-PYPE_MODEL = Callable[[FramelinkPipeline[FRAME]], FRAME]
-# question: why does this not type check correctly on `FramelinkModel | str` only?
-FRAMELINK_MODEL_REF = Union[FramelinkModel, str, PYPE_MODEL]

@@ -44,6 +44,8 @@ def test_model_linking_linear(initial_framelink):
         df_out = ctx.ref(src_frame).head()
         return df_out
 
+    print(type(model_1))
+
     @pipeline.model()
     def model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         df_out = ctx.ref(model_1).sort_values("int_col").tail(2)
