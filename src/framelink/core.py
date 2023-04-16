@@ -3,7 +3,6 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
 
@@ -16,13 +15,33 @@ class FramelinkSettings:
     """Settings to be applied by the"""
 
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
+    default_log_level: int = logging.WARNING
 
 
 T = TypeVar("T")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
 F = Callable[["FramelinkPipeline"], T]  # the definition of one of the models users will write
 
 
-class FramelinkModel(Generic[T]):
+class _NamedComponent:
+    _name: str
+
+    @property
+    def __name__(self):
+        return self._name
+
+    @property
+    def __loc__(self):
+        return hex(id(self))
+
+    @property
+    def name(self) -> str:
+        """
+        Return a namespaced name of this pipeline
+        """
+        return f"{self.__class__.__name__}.{self.__name__}"
+
+
+class FramelinkModel(Generic[T], _NamedComponent):
     """
     A wrapper around a callable model that enables:
      - visibility onto the model DAG
@@ -39,30 +58,25 @@ class FramelinkModel(Generic[T]):
         self,
         model_func: F[T],
         graph: nx.DiGraph,
+        pipeline_settings: FramelinkSettings,
         *,
         persist_after_run: bool = False,
         cache_result: bool = True,
+        logging_level: Optional[int] = None,
     ):
         # These are more "model settings"
         self.persist_after_run = persist_after_run
         self.cache_result = cache_result
-
-        # question: is cache strategy right?
-        if self.cache_result:
-            self._callable = lru_cache()(model_func)
-        else:
-            self._callable = model_func
+        self._callable = model_func
+        self._name = model_func.__name__
 
         # These are the core attributes of the Model
         self._graph_ref = graph
-        self.log = logging.getLogger(f"{self.__class__}.{self.name}")
-
-    @property
-    def __name__(self):
-        return self._callable.__name__
+        self.log = logging.getLogger(self.name)
+        self.log.setLevel(logging_level if logging_level else pipeline_settings.default_log_level)
 
     def __repr__(self):
-        return self.name
+        return f"<{self.name} at {self.__loc__}>"
 
     @property
     def upstreams(self) -> set["FramelinkModel"]:
@@ -79,11 +93,6 @@ class FramelinkModel(Generic[T]):
         :return: a set of models that depend on this model.
         """
         return set(self._graph_ref.successors(self))
-
-    @property
-    def name(self) -> str:
-        """Returns the models name"""
-        return self.__name__
 
     @property
     def docstring(self) -> Optional[str]:
@@ -113,13 +122,19 @@ class FramelinkModel(Generic[T]):
         Build the current model with the context of the pipeline.
         :param ctx: "FramelinkPipeline": framelink pipeline context
         """
-        return self(ctx)
+        old_log, ctx.log = ctx.log, self.log
+        res = self(ctx)
+        ctx.log = old_log
+        return res
 
     # todo: make async?
     def __call__(self, ctx: "FramelinkPipeline") -> T:
+        ctx.log.debug(f"Building {self.name}")
         start_time = time.perf_counter()
         res = self._callable(ctx)
-        self.call_perf += (time.perf_counter() - start_time,)
+        build_time = time.perf_counter() - start_time
+        ctx.log.debug(f"Finished building {self.name} in {build_time:.3}s")
+        self.call_perf += (build_time,)
         return res
 
     def __key(self) -> tuple[str, Optional[str], bool]:
@@ -133,7 +148,7 @@ class FramelinkModel(Generic[T]):
         return hash(self.__key())
 
 
-class FramelinkPipeline:
+class FramelinkPipeline(_NamedComponent):
     """The core class for building DAGs of models and producing links of the results.
 
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
@@ -141,6 +156,8 @@ class FramelinkPipeline:
 
     _models: dict[str, FramelinkModel]
     graph: nx.DiGraph
+    log: logging.Logger  # Placeholder for model logger injection
+    _log: logging.Logger  # Used for pipeline logging.
 
     def __init__(self, name: str = "default", settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
@@ -148,17 +165,12 @@ class FramelinkPipeline:
         self._models = dict()
         self.graph = nx.DiGraph()
         self.settings = settings
-        self.log = logging.getLogger()
+        self._log = logging.getLogger(self.name)
+        self._log.setLevel(settings.default_log_level)
+        self.log = self._log
 
     def __repr__(self):
-        return f"<{self.name} with {len(self)} models at {hex(id(self))}>"
-
-    @property
-    def name(self) -> str:
-        """
-        Return a namespaced name of this pipeline
-        """
-        return f"{self.__class__.__name__}.{self._name}"
+        return f"<{self.name} with {len(self)} models at {self.__loc__}>"
 
     @property
     def model_names(self) -> list[str]:
@@ -180,15 +192,16 @@ class FramelinkPipeline:
         pos = nx.planar_layout(self.graph)
         return nx.draw_networkx(self.graph, pos)
 
-    def streamlit_register_models(self):
-        pass
-
-    def model(self, *, persist_after_run=False, cache_result=True) -> Callable[[F[T]], FramelinkModel[T]]:
+    def model(
+        self, *, persist_after_run=False, cache_result=True, logging_level=None
+    ) -> Callable[[F[T]], FramelinkModel[T]]:
         """Annotation to register a model to the pypeline.
 
         :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
             defined in the :FramelinkSettings: (Default value = False)
         :param cache_result:  (Default value = True)
+        :param logging_level: Sets the logging level specifically for this model. If no level is passed it will default
+            to the default level as per the pipelines settings.
         """
 
         def _decorator(func: F[T]) -> FramelinkModel[T]:
@@ -201,9 +214,12 @@ class FramelinkPipeline:
             model_wrapper: FramelinkModel = FramelinkModel(
                 func,
                 self.graph,
+                self.settings,
                 persist_after_run=persist_after_run,
                 cache_result=cache_result,
+                logging_level=logging_level,
             )
+            self._log.info(f"Registering model '{model_wrapper.name}'")
 
             # todo: brainstorm more new ways of doing this.
             pattern = r"\.ref\((.*?)\)"
@@ -220,6 +236,9 @@ class FramelinkPipeline:
             self.graph.add_node(model_wrapper)
             upstream_edges = ((upstream_model, model_wrapper) for upstream_model in matched_models)
             self.graph.add_edges_from(upstream_edges)
+            self._log.debug(
+                f"Model '{model_wrapper.name}' has {len(model_wrapper.upstreams)} upstreams: {model_wrapper.upstreams}"
+            )
 
             if not nx.is_directed_acyclic_graph(self.graph):
                 cycle = nx.find_cycle(self.graph, model_wrapper)
