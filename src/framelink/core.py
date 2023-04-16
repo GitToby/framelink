@@ -36,7 +36,7 @@ class _NamedComponent:
     @property
     def name(self) -> str:
         """
-        Return a namespaced name of this pipeline
+        Return a namespaced name of this element
         """
         return f"{self.__class__.__name__}.{self.__name__}"
 
@@ -77,6 +77,13 @@ class FramelinkModel(Generic[T], _NamedComponent):
 
     def __repr__(self):
         return f"<{self.name} at {self.__loc__}>"
+
+    @property
+    def name(self) -> str:
+        """
+        Return a namespaced name of this element
+        """
+        return self._callable.__name__
 
     @property
     def upstreams(self) -> set["FramelinkModel"]:
@@ -309,12 +316,11 @@ class FramelinkPipeline(_NamedComponent):
         :returns: The `FramelinkModel` that wraps the model.
         """
 
-        model_name = model if type(model) == str else model.name  # type: ignore
-
         try:
+            model_name = model if type(model) == str else model.name  # type: ignore
             return self._models[model_name]
-        except KeyError as k:
+        except (KeyError, AttributeError) as k:
             raise KeyError(
                 f"Could not locate the model '{model}' in the pipeline {self.name} models: {self.model_names}. "
-                "Have you registered it yet?"
+                "Have you registered it correctly?"
             ) from k

@@ -5,7 +5,7 @@ import networkx as nx
 import pandas as pd
 import pytest as pytest
 
-from framelink.core import FramelinkPipeline
+from framelink.core import FramelinkModel, FramelinkPipeline
 
 
 def test_model_link_dag(initial_framelink):
@@ -21,6 +21,8 @@ def test_model_link_dag(initial_framelink):
             "int_col": [random.randint(0, 100) for _ in range(n)],
         }
         return pd.DataFrame(data)
+
+    src_model_2: FramelinkModel[pd.DataFrame]
 
     @pipeline.model()
     def only_blue_records(ctx: FramelinkPipeline) -> pd.DataFrame:
@@ -63,7 +65,8 @@ def test_deg_raises_error_on_premature_import(initial_framelink):
             m_1 = ctx.ref(model_1)
             return m_1.head
 
-        assert "model_2" in e.value, "We should fail when trying to ref model_2 before import"
+    assert "model_2" in str(e.value)
+    assert "could not locate" in str(e.value).lower()
 
 
 @pytest.mark.skip(reason="todo")
