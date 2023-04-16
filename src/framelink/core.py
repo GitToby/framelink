@@ -1,6 +1,7 @@
 import inspect
 import logging
 import re
+import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,8 +73,8 @@ class FramelinkModel(Generic[T], _NamedComponent):
 
         # These are the core attributes of the Model
         self._graph_ref = graph
-        self.log = logging.getLogger(self.name)
-        self.log.setLevel(logging_level if logging_level else pipeline_settings.default_log_level)
+        self._log = logging.getLogger(self.name)
+        self._log.setLevel(logging_level if logging_level else pipeline_settings.default_log_level)
 
     def __repr__(self):
         return f"<{self.name} at {self.__loc__}>"
@@ -105,13 +106,13 @@ class FramelinkModel(Generic[T], _NamedComponent):
     def docstring(self) -> Optional[str]:
         """ """
         doc__ = self._callable.__doc__
-        return doc__.strip() if doc__ else None
+        return textwrap.dedent(doc__).strip() if doc__ else None
 
     @property
     def source(self) -> str:
         """ """
         source__ = inspect.getsource(self._callable)
-        source__ = source__.strip()
+        source__ = textwrap.dedent(source__).strip()
         return source__
 
     @property
@@ -129,7 +130,7 @@ class FramelinkModel(Generic[T], _NamedComponent):
         Build the current model with the context of the pipeline.
         :param ctx: "FramelinkPipeline": framelink pipeline context
         """
-        old_log, ctx.log = ctx.log, self.log
+        old_log, ctx.log = ctx.log, self._log
         res = self(ctx)
         ctx.log = old_log
         return res
@@ -228,18 +229,16 @@ class FramelinkPipeline(_NamedComponent):
             )
             self._log.info(f"Registering model '{model_wrapper.name}'")
 
+            # we need to keep a ref to the underlying graph to access the models when we ask for them via
+            # `ref()` or `build()`
+            assert model_wrapper.name not in self._models.keys(), f"Model already registered under {model_wrapper.name}"
+            self._models[model_wrapper.name] = model_wrapper
+
             # todo: brainstorm more new ways of doing this.
             pattern = r"\.ref\((.*?)\)"
             matches = re.findall(pattern, model_wrapper.source)
             matched_models = (self.get(name) for name in matches)
 
-            # we need to keep a ref to the underlying graph so we can access the models when we ask for them via
-            # `ref()` or `build()`
-            self._models[model_wrapper.name] = model_wrapper
-
-            # calc max depth and add to the incoming node
-
-            # question: would adding just the ref (String) to the graph and then computing from there be better?
             self.graph.add_node(model_wrapper)
             upstream_edges = ((upstream_model, model_wrapper) for upstream_model in matched_models)
             self.graph.add_edges_from(upstream_edges)

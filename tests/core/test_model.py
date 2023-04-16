@@ -17,23 +17,23 @@ def test_model_registration(empty_framelink):
         """
         return pl.LazyFrame()
 
-    assert "src_frame" in pipeline.model_names
-    assert src_frame in pipeline
-    src_frame_framelink_model = pipeline.get(src_frame)
-    assert src_frame_framelink_model.name == src_frame.__name__
-    # assert src_frame_framelink_model.docstring == src_frame.__doc__.strip()
-    assert src_frame_framelink_model.persist_after_run is False
-    assert src_frame_framelink_model.cache_result is True
-    assert src_frame_framelink_model.call_count == 0
-    assert src_frame_framelink_model.perf_stats == tuple()
+    # naming things
+    assert src_frame.name == "src_frame"
+    assert src_frame.name == src_frame.__name__
 
-    # todo: this should be the functionality, but my brain cant work out how decorators alter the underlying func object
-    # Altering the pipeline.model() func to return the wrapped function makes the below work
-    # assert src_frame.name == "src_frame"
-    # assert src_frame.call_count == 0
-    # However, it then makes the following fail and type hints to stop
-    # pipeline.ref(src_frame)
-    # This means theres an extra step to fetch all the meta details of the model with pipeline.get(src_frame)
+    # metadata of model
+    assert "Im a docstring!" in src_frame.docstring
+    assert src_frame.call_count == 0
+    assert src_frame.perf_stats == tuple()
+
+    # model settings
+    assert src_frame.persist_after_run is False
+    assert src_frame.cache_result is True
+    assert src_frame._log is not None
+
+    # association to pipeline
+    assert src_frame in pipeline
+    assert src_frame.name in pipeline.model_names
 
 
 def test_model_linking_linear(initial_framelink):
@@ -44,8 +44,6 @@ def test_model_linking_linear(initial_framelink):
         df_out = ctx.ref(src_frame).head()
         return df_out
 
-    print(type(model_1))
-
     @pipeline.model()
     def model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         df_out = ctx.ref(model_1).sort_values("int_col").tail(2)
@@ -55,9 +53,8 @@ def test_model_linking_linear(initial_framelink):
     assert model_1 in pipeline
     assert model_2 in pipeline
     assert pipeline.model_names == ["model_1", "model_2", "src_frame"]
-    # assert pipeline.get(model_1).upstream == pipeline.get("")
-    # assert pipeline.get(model_1).downstream == pipeline.get(model_2)
-    # assert pipeline.get(model_1).upstream
+    assert src_frame in model_1.upstreams
+    assert model_2 in model_1.downstreams
 
 
 def test_model_ref(initial_framelink):
@@ -122,16 +119,16 @@ def test_get_metadata(initial_framelink):
 
     assert head_model in pipeline
     assert tail_model in pipeline
-    assert pipeline.get(head_model).docstring is None
-    assert pipeline.get(tail_model).docstring == "Returns the bottom 5 records of the src_model"
-    assert pipeline.get(tail_model).source == (
+    assert head_model.docstring is None
+    assert tail_model.docstring == "Returns the bottom 5 records of the src_model"
+    assert tail_model.source == (
         "@pipeline.model()\n"
-        "    def tail_model(ctx: FramelinkPipeline) -> pd.DataFrame:\n"
-        '        """\n'
-        "        Returns the bottom 5 records of the src_model\n"
-        '        """\n'
-        "        df_out = ctx.ref(src_frame).tail()\n"
-        "        return df_out"
+        "def tail_model(ctx: FramelinkPipeline) -> pd.DataFrame:\n"
+        '    """\n'
+        "    Returns the bottom 5 records of the src_model\n"
+        '    """\n'
+        "    df_out = ctx.ref(src_frame).tail()\n"
+        "    return df_out"
     )
 
 
