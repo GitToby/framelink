@@ -152,3 +152,42 @@ def test_type_values(initial_framelink):
     head_model_2_wrapped = pipeline.model()(head_model_2)
     assert isinstance(head_model_2, Callable)
     assert isinstance(head_model_2_wrapped, FramelinkModel)
+
+
+def test_get_lookups(initial_framelink):
+    pipeline, src_frame = initial_framelink
+
+    @pipeline.model()
+    def head_model(ctx: FramelinkPipeline) -> pd.DataFrame:
+        df_out = ctx.ref(src_frame).head()
+        return df_out
+
+    lookup_model = pipeline.get(head_model)
+    assert lookup_model
+    assert lookup_model is head_model
+
+    lookup_str = pipeline.get("head_model")
+    assert lookup_str
+    assert lookup_str is head_model
+
+
+def test_ref_string(initial_framelink):
+    pipeline, src_frame = initial_framelink
+
+    @pipeline.model()
+    def head_model(ctx: FramelinkPipeline) -> pd.DataFrame:
+        df_out = ctx.ref("src_frame").head()
+        return df_out
+
+    # black should keep the quotes in the below model as '
+    # fmt: off
+    @pipeline.model()
+    def tail_model(ctx: FramelinkPipeline) -> pd.DataFrame:
+        df_out = ctx.ref('src_frame').head()
+        return df_out
+
+    # fmt: on
+
+    assert head_model
+    assert head_model in src_frame.downstreams
+    assert src_frame in head_model.upstreams

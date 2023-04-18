@@ -1,14 +1,16 @@
 import inspect
 import logging
-import re
 import textwrap
 import time
 from dataclasses import dataclass
+from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Callable, Generic, Iterator, Optional, TypeVar, Union
+from typing import Any, Callable, Collection, Generator, Generic, Iterator, Optional, Protocol, TypeVar, Union
 
 import networkx as nx
 import pydot
+
+from framelink._util import parse_model_src_for_internal_refs
 
 
 @dataclass
@@ -23,7 +25,7 @@ T = TypeVar("T")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. et
 F = Callable[["FramelinkPipeline"], T]  # the definition of one of the models users will write
 
 
-class _NamedComponent:
+class _FramelinkComponent(Protocol):
     _name: str
 
     @property
@@ -37,12 +39,18 @@ class _NamedComponent:
     @property
     def name(self) -> str:
         """
-        Return a namespaced name of this element
+        Util method for __name__ for natural flow in writing code.
         """
-        return f"{self.__class__.__name__}.{self.__name__}"
+        return self.__name__
+
+    def __key(self) -> tuple[Any, ...]:
+        ...
+
+    def __hash__(self) -> int:
+        return hash(self.__key())
 
 
-class FramelinkModel(Generic[T], _NamedComponent):
+class FramelinkModel(_FramelinkComponent, Generic[T]):
     """
     A wrapper around a callable model that enables:
      - visibility onto the model DAG
@@ -78,13 +86,6 @@ class FramelinkModel(Generic[T], _NamedComponent):
 
     def __repr__(self):
         return f"<{self.name} at {self.__loc__}>"
-
-    @property
-    def name(self) -> str:
-        """
-        Return a namespaced name of this element
-        """
-        return self._callable.__name__
 
     @property
     def upstreams(self) -> set["FramelinkModel"]:
@@ -137,11 +138,12 @@ class FramelinkModel(Generic[T], _NamedComponent):
 
     # todo: make async?
     def __call__(self, ctx: "FramelinkPipeline") -> T:
-        ctx.log.debug(f"Building {self.name}")
+        ctx.log.info(f"Building {self.name}")
         start_time = time.perf_counter()
         res = self._callable(ctx)
+        # question: this timer is the whole stream, how can we isolate just the build time for this model?
         build_time = time.perf_counter() - start_time
-        ctx.log.debug(f"Finished building {self.name} in {build_time:.3}s")
+        ctx.log.info(f"Finished building {self.name} in {build_time:.3}s")
         self.call_perf += (build_time,)
         return res
 
@@ -152,11 +154,8 @@ class FramelinkModel(Generic[T], _NamedComponent):
         """
         return self.name, self.source, self.persist_after_run
 
-    def __hash__(self) -> int:
-        return hash(self.__key())
 
-
-class FramelinkPipeline(_NamedComponent):
+class FramelinkPipeline(_FramelinkComponent):
     """The core class for building DAGs of models and producing links of the results.
 
     Each model linked to the pipeline will have context onto their upstream and downstream dependencies.
@@ -184,6 +183,10 @@ class FramelinkPipeline(_NamedComponent):
     def model_names(self) -> list[str]:
         """Return a list of model names registered to this pipeline"""
         return sorted(m.name for m in self._models.values())
+
+    @property
+    def trees(self):
+        return
 
     def graph_dot(self) -> pydot.Dot:
         """
@@ -235,8 +238,7 @@ class FramelinkPipeline(_NamedComponent):
             self._models[model_wrapper.name] = model_wrapper
 
             # todo: brainstorm more new ways of doing this.
-            pattern = r"\.ref\((.*?)\)"
-            matches = re.findall(pattern, model_wrapper.source)
+            matches = parse_model_src_for_internal_refs(model_wrapper.source)
             matched_models = (self.get(name) for name in matches)
 
             self.graph.add_node(model_wrapper)
@@ -255,7 +257,10 @@ class FramelinkPipeline(_NamedComponent):
         return _decorator
 
     def ref(self, model: FramelinkModel[T] | str) -> T:
-        """ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
+        """
+        ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
+
+        Raises a KeyError if the model Key cant be found.
 
         :param model: _Model: The model function with output you want to use.
         Example:
@@ -271,11 +276,8 @@ class FramelinkPipeline(_NamedComponent):
         >>> def my_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         >>>     return ctx.ref(my_model_1).head()
         """
-        try:
-            model_wrapper = self.get(model)
-            return model_wrapper.build(self)
-        except KeyError as ke:
-            raise KeyError(f"No key {model}") from ke
+        model_wrapper = self.get(model)
+        return model_wrapper.build(self)
 
     def build(self, model_name: FramelinkModel[T] | str) -> T:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
@@ -285,6 +287,40 @@ class FramelinkPipeline(_NamedComponent):
         """
         return self.ref(model_name)
 
+    def topological_sorted_nodes(self) -> Generator[tuple[FramelinkModel, ...], None, None]:
+        """
+        This implementation is more parralel aware than the networkx implementation/
+
+        Basically a repeatable version of the example at https://docs.python.org/3/library/graphlib.html
+        :return:
+        """
+        topological_sorter: TopologicalSorter = TopologicalSorter()
+        for node in self._models.values():
+            topological_sorter.add(node, *node.upstreams)
+
+        topological_sorter.prepare()
+        while topological_sorter.is_active():
+            nodes = topological_sorter.get_ready()
+            yield nodes
+            topological_sorter.done(*nodes)
+
+    @classmethod
+    def merge_pipelines(
+        cls,
+        new_name: str,
+        settings: FramelinkSettings = FramelinkSettings(),
+        *,
+        collection: Collection["FramelinkPipeline"],
+    ) -> "FramelinkPipeline":
+        new_pipeline = FramelinkPipeline(new_name, settings)
+
+        for other in collection:
+            print(other.name)
+            assert len(set(new_pipeline.model_names) & set(other.model_names)) == 0
+            new_pipeline._models = new_pipeline._models | other._models
+
+        return new_pipeline
+
     def __key(self) -> tuple[int, ...]:
         """
         The state of a pypeline should be the aggregation settings that determine the way models should behave.
@@ -293,9 +329,6 @@ class FramelinkPipeline(_NamedComponent):
         take while building.
         """
         return tuple(hash(m) for m in self._models.values())
-
-    def __hash__(self) -> int:
-        return hash(self.__key())
 
     def __len__(self) -> int:
         return len(self._models.keys())
