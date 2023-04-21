@@ -256,7 +256,7 @@ class FramelinkPipeline(_FramelinkComponent):
 
         return _decorator
 
-    def ref(self, model: FramelinkModel[T] | str) -> T:
+    def ref(self, model: Union[FramelinkModel[T], str]) -> T:
         """
         ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
 
@@ -279,7 +279,7 @@ class FramelinkPipeline(_FramelinkComponent):
         model_wrapper = self.get(model)
         return model_wrapper.build(self)
 
-    def build(self, model_name: FramelinkModel[T] | str) -> T:
+    def build(self, model_name: Union[FramelinkModel[T], str]) -> T:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
          graph up to the nearest cache or persisted cache.
 
@@ -339,7 +339,7 @@ class FramelinkPipeline(_FramelinkComponent):
     def __contains__(self, item: Union[FramelinkModel, F[T]]) -> bool:
         return item.__name__ in self._models.keys() or item in self._models.values()
 
-    def get(self, model: FramelinkModel | str) -> FramelinkModel:
+    def get(self, model: Union[FramelinkModel, str]) -> FramelinkModel:
         """
         Given a `FramelinkModel`, or the model's name, return the`FramelinkModel`.
 
