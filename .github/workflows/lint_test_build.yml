@@ -19,15 +19,16 @@ jobs:
         with:
           python-version: ${{ matrix.python_version }}
           cache: 'pip'
+          cache-dependency-path: 'pdm.lock'
       - name: Install dependencies
         run: pip install .[dev]
       - name: black
-        run: black . --check
+        run: black . --check -v
       - name: ruff
         run: ruff check .
-      - name: Run tests
-        run: pytest --cov src --cov-report xml --cov-report term
-      - name: Codecov
+      - name: pytest
+        run: pytest --cov=framelink --cov-report=xml --cov-report=term
+      - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

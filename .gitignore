@@ -11,3 +11,9 @@ data
 /.coverage
 /coverage.xml
 /src/*.egg-info/
+**/*/.pytest_cache/
+/.pdm.toml
+/.vscode/settings.json
+/**/.ipynb_checkpoints
+.DS_Store
+*.pyc
