@@ -1,19 +1,19 @@
 .mypy_cache
 .ruff_cache
-.venv
+.venv*
 data
-!/data/divy_trips_limited.csv
 .idea
 /dist/
 /build/
-# this is dynamic
+# this is a dynamic file
 *__version__.py
 /.coverage
 /coverage.xml
 /src/*.egg-info/
-**/*/.pytest_cache/
-/.pdm.toml
-/.vscode/settings.json
+**/.pytest_cache/
+/pdm.toml
 /**/.ipynb_checkpoints
 .DS_Store
 *.pyc
+/.vscode/
+/docker-compose.yml

@@ -1,7 +1,7 @@
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gittoby/framelink/lint_test_build.yml)
 ![GitHub Release Date](https://img.shields.io/github/release-date/GitToby/framelink)
 
-Famelink is a simple wrapper that will provide context into pandas, polars and other Dataframe engines. See roadmap
+Framelink is a simple wrapper that will provide context into pandas, polars and other Dataframe engines. See roadmap
 below for future goals of the project.
 
 **This project is still in prerelease, consider the API unstable. Any usage should be pinned.**

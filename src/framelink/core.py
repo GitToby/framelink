@@ -10,6 +10,7 @@ from typing import Any, Callable, Collection, Generator, Generic, Iterator, Opti
 import networkx as nx
 import pydot
 
+from framelink._cli import CLI_CONTEXT
 from framelink._util import parse_model_src_for_internal_refs
 
 
@@ -175,6 +176,7 @@ class FramelinkPipeline(_FramelinkComponent):
         self._log = logging.getLogger(self.name)
         self._log.setLevel(settings.default_log_level)
         self.log = self._log
+        CLI_CONTEXT.fl_models[self._name] = self
 
     def __repr__(self):
         return f"<{self.name} with {len(self)} models at {self.__loc__}>"
