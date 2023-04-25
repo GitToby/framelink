@@ -176,7 +176,7 @@ class FramelinkPipeline(_FramelinkComponent):
         self._log = logging.getLogger(self.name)
         self._log.setLevel(settings.default_log_level)
         self.log = self._log
-        CLI_CONTEXT.fl_models[self._name] = self
+        CLI_CONTEXT.fl_pipelines[self._name] = self
 
     def __repr__(self):
         return f"<{self.name} with {len(self)} models at {self.__loc__}>"

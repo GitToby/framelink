@@ -16,7 +16,7 @@ _app = typer.Typer()
 
 @dataclass
 class CliContext:
-    fl_models: dict[str, "FramelinkPipeline"] = field(default_factory=dict)
+    fl_pipelines: dict[str, "FramelinkPipeline"] = field(default_factory=dict)
     verbose: bool = False
     pipeline_name: Optional[str] = None
 
@@ -26,9 +26,9 @@ CLI_CONTEXT = CliContext()
 
 @_app.callback()
 def set_up(
+    main_file: Path = typer.Argument(..., exists=True, readable=True, writable=False, file_okay=True, dir_okay=False),
     verbose: bool = typer.Option(False, "-v"),
-    main_file: Path = typer.Argument(..., exists=True, readable=True, file_okay=True, writable=False, dir_okay=False),
-    pipeline_name: Optional[str] = typer.Argument(None),
+    pipeline_name: Optional[str] = typer.Option(None),
 ):
     """
     The main setup script that's run before all commands.
@@ -43,7 +43,7 @@ def set_up(
         print(f"{CLI_CONTEXT=}")
         logging.basicConfig(level=logging.DEBUG)
 
-    if len(CLI_CONTEXT.fl_models) > 1 and not pipeline_name:
+    if len(CLI_CONTEXT.fl_pipelines) > 1 and not pipeline_name:
         raise ValueError("More than one pipeline to work with, please pass in a pipeline name.")
 
     CLI_CONTEXT.verbose = verbose
@@ -57,7 +57,7 @@ def list_models(graph: bool = typer.Option(False, "-g")):
     """
 
     print(f"listing models {graph=}")
-    print(f"Model names: {list(CLI_CONTEXT.fl_models.values())[0].model_names}")
+    print(f"Model names: {list(CLI_CONTEXT.fl_pipelines.values())[0].model_names}")
 
 
 def _import_pipelines_from_file(main_file: Path) -> None:
@@ -66,7 +66,7 @@ def _import_pipelines_from_file(main_file: Path) -> None:
     contex available for inspection and execution.
     :param main_file: the path to the python file to be imported.
     """
-    if main_file.anchor != ".py":
+    if main_file.suffix != ".py":
         raise ImportError(f"{main_file} is not a .py file and is unsupported in this version of framelink")
 
     loader = SourceFileLoader("scripts", str(main_file))
@@ -86,3 +86,7 @@ def build(model_name: str = typer.Argument(...)):
     :return:
     """
     print(f"building {model_name}")
+
+
+if __name__ == "__main__":
+    _app()
