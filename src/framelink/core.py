@@ -5,13 +5,14 @@ import time
 from dataclasses import dataclass
 from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Any, Callable, Collection, Generator, Generic, Iterator, Optional, Protocol, TypeVar, Union
+from typing import Any, Callable, Collection, Generator, Generic, Iterator, Optional, Protocol, Type, TypeVar, Union
 
 import networkx as nx
 import pydot
 
 from framelink._cli import CLI_CONTEXT
 from framelink._util import parse_model_src_for_internal_refs
+from framelink.persistance import ModelPersistence, NoPersistence
 
 
 @dataclass
@@ -20,6 +21,7 @@ class FramelinkSettings:
 
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
     default_log_level: int = logging.WARNING
+    default_persistence_method: Type[ModelPersistence] = NoPersistence
 
 
 T = TypeVar("T")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
@@ -70,15 +72,13 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         graph: nx.DiGraph,
         pipeline_settings: FramelinkSettings,
         *,
-        persist_after_run: bool = False,
-        cache_result: bool = True,
         logging_level: Optional[int] = None,
+        persistence_method: ModelPersistence = NoPersistence(),
     ):
         # These are more "model settings"
-        self.persist_after_run = persist_after_run
-        self.cache_result = cache_result
         self._callable = model_func
         self._name = model_func.__name__
+        self._persistence_method = persistence_method
 
         # These are the core attributes of the Model
         self._graph_ref = graph
@@ -139,21 +139,25 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
 
     # todo: make async?
     def __call__(self, ctx: "FramelinkPipeline") -> T:
-        ctx.log.info(f"Building {self.name}")
+
+        ctx.log.info(f"Building {self.name}...")
         start_time = time.perf_counter()
         res = self._callable(ctx)
         # question: this timer is the whole stream, how can we isolate just the build time for this model?
         build_time = time.perf_counter() - start_time
         ctx.log.info(f"Finished building {self.name} in {build_time:.3}s")
+
+        # post build steps
+        self._persistence_method.store_frame(self.name, res)
         self.call_perf += (build_time,)
         return res
 
-    def __key(self) -> tuple[str, Optional[str], bool]:
+    def __key(self) -> tuple[str, Optional[str]]:
         """
         The uniqueness of a Model should be defined as its config and execution. This is used to determine the cache
         settings for the model when it is run
         """
-        return self.name, self.source, self.persist_after_run
+        return self.name, self.source
 
 
 class FramelinkPipeline(_FramelinkComponent):
@@ -206,15 +210,14 @@ class FramelinkPipeline(_FramelinkComponent):
         return nx.draw_networkx(self.graph, pos)
 
     def model(
-        self, *, persist_after_run=False, cache_result=True, logging_level=None
+        self, *, logging_level=None, persistence_method: ModelPersistence = NoPersistence()
     ) -> Callable[[F[T]], FramelinkModel[T]]:
-        """Annotation to register a model to the pypeline.
+        """
+        Annotation to register a model to the framelink pipeline.
 
-        :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
-            defined in the :FramelinkSettings: (Default value = False)
-        :param cache_result:  (Default value = True)
         :param logging_level: Sets the logging level specifically for this model. If no level is passed it will default
             to the default level as per the pipelines settings.
+        :param persistence_method: Sets the persistence approach used when storing the model.
         """
 
         def _decorator(func: F[T]) -> FramelinkModel[T]:
@@ -225,12 +228,7 @@ class FramelinkPipeline(_FramelinkComponent):
             """
 
             model_wrapper: FramelinkModel = FramelinkModel(
-                func,
-                self.graph,
-                self.settings,
-                persist_after_run=persist_after_run,
-                cache_result=cache_result,
-                logging_level=logging_level,
+                func, self.graph, self.settings, logging_level=logging_level, persistence_method=persistence_method
             )
             self._log.info(f"Registering model '{model_wrapper.name}'")
 
@@ -291,7 +289,7 @@ class FramelinkPipeline(_FramelinkComponent):
 
     def topological_sorted_nodes(self) -> Generator[tuple[FramelinkModel, ...], None, None]:
         """
-        This implementation is more parralel aware than the networkx implementation/
+        This implementation is more parallel aware than the networkx implementation/
 
         Basically a repeatable version of the example at https://docs.python.org/3/library/graphlib.html
         :return:
