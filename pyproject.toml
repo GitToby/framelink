@@ -9,7 +9,8 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    "networkx>=3.0"
+    "networkx>=3.0",
+    "typer[all]>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,9 @@ dev = [
     "pyarrow>=11.0.0",
     "jupyter>=1.0.0",
 ]
+
+[project.scripts]
+framelink = "framelink._cli:_app"
 
 [project.urls]
 github = "https://github.com/GitToby/framelink"

@@ -1,3 +1,4 @@
+import contextlib
 import inspect
 import logging
 import textwrap
@@ -5,12 +6,16 @@ import time
 from dataclasses import dataclass
 from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Any, Callable, Collection, Generator, Generic, Iterator, Optional, Protocol, TypeVar, Union
+from typing import Any, Callable, Collection, Generator, Generic, Iterator, Optional, Protocol, Union
 
 import networkx as nx
 import pydot
 
+from framelink._cli import CLI_CONTEXT
 from framelink._util import parse_model_src_for_internal_refs
+from framelink.storage.core import NoStorage
+from framelink.storage.interfaces import FramelinkStorage
+from framelink.types import F, T
 
 
 @dataclass
@@ -19,10 +24,7 @@ class FramelinkSettings:
 
     persist_models_dir: Path = Path(__file__).parent.parent / "data"
     default_log_level: int = logging.WARNING
-
-
-T = TypeVar("T")  # usually one of pl.DataFrame, pl.DataFrame, pl.LazyFrame.. etc
-F = Callable[["FramelinkPipeline"], T]  # the definition of one of the models users will write
+    default_storage: FramelinkStorage = NoStorage()
 
 
 class _FramelinkComponent(Protocol):
@@ -59,7 +61,7 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
      - adapters to run the model on various engines
     """
 
-    _callable: F[T]
+    callable: F[T]
     _graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
 
@@ -69,15 +71,13 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         graph: nx.DiGraph,
         pipeline_settings: FramelinkSettings,
         *,
-        persist_after_run: bool = False,
-        cache_result: bool = True,
         logging_level: Optional[int] = None,
+        store: FramelinkStorage[T] = NoStorage(),
     ):
         # These are more "model settings"
-        self.persist_after_run = persist_after_run
-        self.cache_result = cache_result
-        self._callable = model_func
+        self.callable = model_func
         self._name = model_func.__name__
+        self._store = store
 
         # These are the core attributes of the Model
         self._graph_ref = graph
@@ -106,13 +106,13 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
     @property
     def docstring(self) -> Optional[str]:
         """ """
-        doc__ = self._callable.__doc__
+        doc__ = self.callable.__doc__
         return textwrap.dedent(doc__).strip() if doc__ else None
 
     @property
     def source(self) -> str:
         """ """
-        source__ = inspect.getsource(self._callable)
+        source__ = inspect.getsource(self.callable)
         source__ = textwrap.dedent(source__).strip()
         return source__
 
@@ -126,33 +126,36 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         """ """
         return self.call_perf
 
+    @contextlib.contextmanager
+    def _own_logging(self, ctx: "FramelinkPipeline"):
+        old_log, ctx.log = ctx.log, self._log
+        yield
+        ctx.log = old_log
+
     def build(self, ctx: "FramelinkPipeline") -> T:
         """
         Build the current model with the context of the pipeline.
         :param ctx: "FramelinkPipeline": framelink pipeline context
         """
-        old_log, ctx.log = ctx.log, self._log
-        res = self(ctx)
-        ctx.log = old_log
+        with self._own_logging(ctx):
+            ctx.log.info(f"Building {self.name}...")
+
+            start_time = time.perf_counter()
+            res = self._store(self, ctx)
+            # question: this timer is the whole stream, how can we isolate just the build time for this model?
+            build_time = time.perf_counter() - start_time
+            ctx.log.info(f"Finished building {self.name} in {build_time:.3}s")
+
+            # post build steps
+            self.call_perf += (build_time,)
         return res
 
-    # todo: make async?
-    def __call__(self, ctx: "FramelinkPipeline") -> T:
-        ctx.log.info(f"Building {self.name}")
-        start_time = time.perf_counter()
-        res = self._callable(ctx)
-        # question: this timer is the whole stream, how can we isolate just the build time for this model?
-        build_time = time.perf_counter() - start_time
-        ctx.log.info(f"Finished building {self.name} in {build_time:.3}s")
-        self.call_perf += (build_time,)
-        return res
-
-    def __key(self) -> tuple[str, Optional[str], bool]:
+    def __key(self) -> tuple[str, Optional[str]]:
         """
         The uniqueness of a Model should be defined as its config and execution. This is used to determine the cache
         settings for the model when it is run
         """
-        return self.name, self.source, self.persist_after_run
+        return self.name, self.source
 
 
 class FramelinkPipeline(_FramelinkComponent):
@@ -175,6 +178,7 @@ class FramelinkPipeline(_FramelinkComponent):
         self._log = logging.getLogger(self.name)
         self._log.setLevel(settings.default_log_level)
         self.log = self._log
+        CLI_CONTEXT.fl_pipelines[self._name] = self
 
     def __repr__(self):
         return f"<{self.name} with {len(self)} models at {self.__loc__}>"
@@ -204,16 +208,19 @@ class FramelinkPipeline(_FramelinkComponent):
         return nx.draw_networkx(self.graph, pos)
 
     def model(
-        self, *, persist_after_run=False, cache_result=True, logging_level=None
+        self, *, logging_level=None, storage: Optional[FramelinkStorage[T]] = None
     ) -> Callable[[F[T]], FramelinkModel[T]]:
-        """Annotation to register a model to the pypeline.
+        """
+        Annotation to register a model to the framelink pipeline.
 
-        :param persist_after_run: Write the file to disk after running this model. The approach to writing the model is
-            defined in the :FramelinkSettings: (Default value = False)
-        :param cache_result:  (Default value = True)
         :param logging_level: Sets the logging level specifically for this model. If no level is passed it will default
             to the default level as per the pipelines settings.
+        :param storage: Sets the persistence approach used when storing the model.
         """
+        if storage:
+            model_store_unwrapped = storage
+        else:
+            model_store_unwrapped = self.settings.default_storage
 
         def _decorator(func: F[T]) -> FramelinkModel[T]:
             """Internal wrapping of the model function to produce the metadata about the model.
@@ -223,12 +230,7 @@ class FramelinkPipeline(_FramelinkComponent):
             """
 
             model_wrapper: FramelinkModel = FramelinkModel(
-                func,
-                self.graph,
-                self.settings,
-                persist_after_run=persist_after_run,
-                cache_result=cache_result,
-                logging_level=logging_level,
+                func, self.graph, self.settings, logging_level=logging_level, store=model_store_unwrapped
             )
             self._log.info(f"Registering model '{model_wrapper.name}'")
 
@@ -284,12 +286,13 @@ class FramelinkPipeline(_FramelinkComponent):
          graph up to the nearest cache or persisted cache.
 
         :param model_name: "PYPE_MODEL": the model to build in the context of this pipeline.
+        :param overrides: A mapping of models whos result should be overridden for this build.
         """
         return self.ref(model_name)
 
     def topological_sorted_nodes(self) -> Generator[tuple[FramelinkModel, ...], None, None]:
         """
-        This implementation is more parralel aware than the networkx implementation/
+        This implementation is more parallel aware than the networkx implementation/
 
         Basically a repeatable version of the example at https://docs.python.org/3/library/graphlib.html
         :return:

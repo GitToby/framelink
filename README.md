@@ -1,7 +1,7 @@
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gittoby/framelink/lint_test_build.yml)
 ![GitHub Release Date](https://img.shields.io/github/release-date/GitToby/framelink)
 
-Famelink is a simple wrapper that will provide context into pandas, polars and other Dataframe engines. See roadmap
+Framelink is a simple wrapper that will provide context into pandas, polars and other Dataframe engines. See roadmap
 below for future goals of the project.
 
 **This project is still in prerelease, consider the API unstable. Any usage should be pinned.**
@@ -27,19 +27,27 @@ Framelink should provide a way for collaborating teams to write python or SQL mo
 - A **Model** is a definition of sourcing data and, potentially, a transform. It's an ETL in its most basic form.
 - A **Frame** is a result of a _model_ run.
 
+## Features
+- [x] Model links & DAG + diagramming
+- [x] Context logging per model
+- [x] Diagramming and tracking of the model DAG
+- [x] Caches and auto-persistence
+- [ ] Dynamic sourcing for models
+- [x] Cli to run a project
+
 ## Example
 
 ```python
-import os
 from pathlib import Path
 
 import pandas as pd
 import polars as pl
 
 from framelink.core import FramelinkPipeline, FramelinkSettings
+from framelink.storage.core import PickleStorage, NoStorage
 
 settings = FramelinkSettings(
-    persist_models_dir=Path(os.getcwd()) / "data"
+  default_storage=PickleStorage(Path(__file__).parent / "data")
 )
 
 pipeline = FramelinkPipeline(settings=settings)
@@ -47,27 +55,27 @@ pipeline = FramelinkPipeline(settings=settings)
 
 @pipeline.model()
 def src_frame_1(_: FramelinkPipeline) -> pd.DataFrame:
-    return pd.DataFrame(data={
-        "name": ["amy", "peter"],
-        "age": [31, 12],
-    })
+  return pd.DataFrame(data={
+    "name": ["amy", "peter"],
+    "age": [31, 12],
+  })
 
 
-@pipeline.model()
+@pipeline.model(storage=NoStorage())
 def src_frame_2(_: FramelinkPipeline) -> pd.DataFrame:
-    return pd.DataFrame(data={
-        "name": ["amy", "peter", "helen"],
-        "fave_food": ["oranges", "chocolate", "water"],
-    })
+  return pd.DataFrame(data={
+    "name": ["amy", "peter", "helen"],
+    "fave_food": ["oranges", "chocolate", "water"],
+  })
 
 
 @pipeline.model()
 def merge_model(ctx: FramelinkPipeline) -> pl.DataFrame:
-    res_1 = ctx.ref(src_frame_1)
-    res_2 = ctx.ref(src_frame_2)
-    key = "name"
-    ctx.log.info(f"Merging both sources on {key}")
-    return pl.from_pandas(res_1).join(pl.from_pandas(res_2), on=key)
+  res_1 = ctx.ref(src_frame_1)
+  res_2 = ctx.ref(src_frame_2)
+  key = "name"
+  ctx.log.info(f"Merging both sources on {key}")
+  return pl.from_pandas(res_1).join(pl.from_pandas(res_2), on=key)
 
 
 # build with implicit context
@@ -115,14 +123,12 @@ This could change...
 - [ ] Cleaner graph results
 - [ ] Merging of multiple framelink pipelines enabling
 - [ ] Orchestration passthrough and local execution.
+- [x] Caches and auto-persistence
+- [x] Dynamic sourcing for models
+- [ ] model overrides for CLI and python runtimes.
+- [x] Cli to run a project
 
 ### v0.4.0
-
-- [ ] Caches and auto-persistence
-- [ ] Dynamic sourcing for models
-- [ ] Cli to run a project
-
-### v0.5.0
 
 - [ ] SQL models & dbt, sqlmesh compatability
 - [ ] Open Tracing integration
