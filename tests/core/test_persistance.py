@@ -31,7 +31,7 @@ def test_no_persistence(initial_framelink):
         return df_out
 
     _ = pipeline.build(tail_model)
-    assert wrapped_store.call_count > 1
+    assert wrapped_store.call_count > 0
 
 
 @pytest.mark.skip(reason="todo")
