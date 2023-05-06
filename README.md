@@ -1,8 +1,11 @@
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gittoby/framelink/lint_test_build.yml)
-![GitHub Release Date](https://img.shields.io/github/release-date/GitToby/framelink)
+[![Version](https://img.shields.io/pypi/v/framelink)](https://pypi.org/project/framelink/)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gittoby/framelink/lint_test_build.yml)](https://github.com/GitToby/framelink)
+[![GitHub Release Date](https://img.shields.io/github/release-date/GitToby/framelink)](https://github.com/GitToby/framelink)
+[![codecov](https://codecov.io/gh/GitToby/framelink/branch/master/graph/badge.svg?token=Uh8viFPyOG)](https://codecov.io/gh/GitToby/framelink)
+[![PyPi downloads](https://img.shields.io/pypi/dm/framelink)](https://pypi.org/project/framelink/)
 
-Framelink is a simple wrapper that will provide context into pandas, polars and other Dataframe engines. See roadmap
-below for future goals of the project.
+Framelink is a simple wrapper thats designed to provide context into pandas, polars and other Dataframe engines. See
+roadmap below for future of the project.
 
 **This project is still in prerelease, consider the API unstable. Any usage should be pinned.**
 
@@ -28,12 +31,14 @@ Framelink should provide a way for collaborating teams to write python or SQL mo
 - A **Frame** is a result of a _model_ run.
 
 ## Features
+
 - [x] Model links & DAG + diagramming
 - [x] Context logging per model
 - [x] Diagramming and tracking of the model DAG
 - [x] Caches and auto-persistence
 - [ ] Dynamic sourcing for models
 - [x] Cli to run a project
+- [ ] Transpiler for popular DAG execution environments
 
 ## Example
 
@@ -47,7 +52,7 @@ from framelink.core import FramelinkPipeline, FramelinkSettings
 from framelink.storage.core import PickleStorage, NoStorage
 
 settings = FramelinkSettings(
-  default_storage=PickleStorage(Path(__file__).parent / "data")
+    default_storage=PickleStorage(Path(__file__).parent / "data")
 )
 
 pipeline = FramelinkPipeline(settings=settings)
@@ -55,27 +60,27 @@ pipeline = FramelinkPipeline(settings=settings)
 
 @pipeline.model()
 def src_frame_1(_: FramelinkPipeline) -> pd.DataFrame:
-  return pd.DataFrame(data={
-    "name": ["amy", "peter"],
-    "age": [31, 12],
-  })
+    return pd.DataFrame(data={
+        "name": ["amy", "peter"],
+        "age": [31, 12],
+    })
 
 
 @pipeline.model(storage=NoStorage())
 def src_frame_2(_: FramelinkPipeline) -> pd.DataFrame:
-  return pd.DataFrame(data={
-    "name": ["amy", "peter", "helen"],
-    "fave_food": ["oranges", "chocolate", "water"],
-  })
+    return pd.DataFrame(data={
+        "name": ["amy", "peter", "helen"],
+        "fave_food": ["oranges", "chocolate", "water"],
+    })
 
 
 @pipeline.model()
 def merge_model(ctx: FramelinkPipeline) -> pl.DataFrame:
-  res_1 = ctx.ref(src_frame_1)
-  res_2 = ctx.ref(src_frame_2)
-  key = "name"
-  ctx.log.info(f"Merging both sources on {key}")
-  return pl.from_pandas(res_1).join(pl.from_pandas(res_2), on=key)
+    res_1 = ctx.ref(src_frame_1)
+    res_2 = ctx.ref(src_frame_2)
+    key = "name"
+    ctx.log.info(f"Merging both sources on {key}")
+    return pl.from_pandas(res_1).join(pl.from_pandas(res_2), on=key)
 
 
 # build with implicit context
