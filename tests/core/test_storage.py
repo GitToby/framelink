@@ -5,7 +5,7 @@ import polars as pl
 import pytest as pytest
 
 from framelink.core import FramelinkPipeline
-from framelink.persistance.interfaces import NoStorage
+from framelink.storage.interfaces import NoStorage
 
 
 def test_no_persistence(initial_framelink):

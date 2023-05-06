@@ -13,7 +13,8 @@ import pydot
 
 from framelink._cli import CLI_CONTEXT
 from framelink._util import parse_model_src_for_internal_refs
-from framelink.persistance.interfaces import FramelinkStorage, NoStorage
+from framelink.storage.core import NoStorage
+from framelink.storage.interfaces import FramelinkStorage
 from framelink.types import F, T
 
 
@@ -207,17 +208,17 @@ class FramelinkPipeline(_FramelinkComponent):
         return nx.draw_networkx(self.graph, pos)
 
     def model(
-        self, *, logging_level=None, model_store: Optional[FramelinkStorage[T]] = None
+        self, *, logging_level=None, storage: Optional[FramelinkStorage[T]] = None
     ) -> Callable[[F[T]], FramelinkModel[T]]:
         """
         Annotation to register a model to the framelink pipeline.
 
         :param logging_level: Sets the logging level specifically for this model. If no level is passed it will default
             to the default level as per the pipelines settings.
-        :param model_store: Sets the persistence approach used when storing the model.
+        :param storage: Sets the persistence approach used when storing the model.
         """
-        if model_store:
-            model_store_unwrapped = model_store
+        if storage:
+            model_store_unwrapped = storage
         else:
             model_store_unwrapped = self.settings.default_storage
 
