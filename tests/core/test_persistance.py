@@ -40,6 +40,11 @@ def test_in_memory_store():
 
 
 @pytest.mark.skip(reason="todo")
+def test_pickle_store():
+    pass
+
+
+@pytest.mark.skip(reason="todo")
 def test_override_cacheing():
     pass
 

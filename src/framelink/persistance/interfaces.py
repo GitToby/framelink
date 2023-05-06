@@ -1,7 +1,9 @@
 import abc
 import functools
+import pickle
 from abc import ABC
-from typing import Any, Generic, Literal, Optional, TYPE_CHECKING
+from pathlib import Path
+from typing import Any, Generic, Optional, TYPE_CHECKING
 
 from framelink.types import T
 
@@ -42,9 +44,13 @@ class FramelinkStorage(abc.ABC, Generic[T]):
 
 
 class FilePersistence(FramelinkStorage, ABC):
-    def __init__(self, file_type: Literal["csv", "json", "parquet"]):
+    def __init__(self, data_dir: Path, file_suffix: str = ""):
         super().__init__()
-        self.file_type = file_type
+        self.data_dir = data_dir
+        self.file_suffix = file_suffix
+
+    def _get_model_path(self, model: "FramelinkModel") -> Path:
+        return self.data_dir / f"{model.name}.{self.file_suffix}"
 
 
 class SQLPersistence(FramelinkStorage, ABC):
@@ -76,3 +82,19 @@ class InMemory(FramelinkStorage):
     def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> Optional["T"]:
         cache = self._cache(model.build)
         return cache()
+
+
+class PickleStorage(FilePersistence):
+    def __init__(self, data_dir: Path):
+        super().__init__(data_dir, "pickle")
+
+    def _store_frame(self, model: "FramelinkModel", result_frame: "T"):
+        path = self._get_model_path(model)
+        with path.open("wb") as f:
+            pickle.dumps(f)
+
+    def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> Optional["T"]:
+        path = self._get_model_path(model)
+        with path.open("rb") as f:
+            res = pickle.load(f)
+        return res
