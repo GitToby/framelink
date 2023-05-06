@@ -7,6 +7,10 @@ name = "framelink"
 description = ""
 readme = "README.md"
 dynamic = ["version"]
+keywords = ["data", "DAG", "orchastration", "dataframe"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+]
 
 dependencies = [
     "networkx>=3.0",
