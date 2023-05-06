@@ -1,12 +1,20 @@
-import polars as pl
+from unittest.mock import MagicMock
+
 import pandas as pd
+import polars as pl
 import pytest as pytest
 
 from framelink.core import FramelinkPipeline
+from framelink.persistance.interfaces import NoStorage
 
 
 def test_no_persistence(initial_framelink):
     pipeline, src_frame = initial_framelink
+
+    assert isinstance(pipeline.settings.default_storage, NoStorage)
+
+    wrapped_store = MagicMock(wraps=pipeline.settings.default_storage)
+    pipeline.settings.default_storage = wrapped_store
 
     @pipeline.model()
     def head_model(ctx: FramelinkPipeline) -> pl.DataFrame:
@@ -22,9 +30,12 @@ def test_no_persistence(initial_framelink):
         df_out = ctx.ref(src_frame).tail()
         return df_out
 
+    _ = pipeline.build(tail_model)
+    assert wrapped_store.call_count > 1
+
 
 @pytest.mark.skip(reason="todo")
-def test_cacheing_off():
+def test_in_memory_store():
     pass
 
 

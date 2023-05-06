@@ -1,5 +1,3 @@
-from typing import Callable
-
 import pandas as pd
 import polars as pl
 import pytest
@@ -10,7 +8,7 @@ from framelink.core import FramelinkModel, FramelinkPipeline
 def test_model_registration(empty_framelink):
     pipeline = empty_framelink
 
-    @pipeline.model(persist_after_run=False, cache_result=True)
+    @pipeline.model()
     def src_frame(_: FramelinkPipeline) -> pl.LazyFrame:
         """
         Im a docstring!
@@ -27,8 +25,6 @@ def test_model_registration(empty_framelink):
     assert src_frame.perf_stats == tuple()
 
     # model settings
-    assert src_frame.persist_after_run is False
-    assert src_frame.cache_result is True
     assert src_frame._log is not None
 
     # association to pipeline
@@ -140,17 +136,14 @@ def test_type_values(initial_framelink):
         df_out = ctx.ref(src_frame).head()
         return df_out
 
-    assert isinstance(head_model, Callable)
     assert isinstance(head_model, FramelinkModel)
 
     def head_model_2(ctx: FramelinkPipeline) -> pd.DataFrame:
         df_out = ctx.ref(src_frame).head()
         return df_out
 
-    assert isinstance(head_model_2, Callable)
     assert not isinstance(head_model_2, FramelinkModel)
     head_model_2_wrapped = pipeline.model()(head_model_2)
-    assert isinstance(head_model_2, Callable)
     assert isinstance(head_model_2_wrapped, FramelinkModel)
 
 
