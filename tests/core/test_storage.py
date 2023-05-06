@@ -5,13 +5,13 @@ import polars as pl
 import pytest as pytest
 
 from framelink.core import FramelinkPipeline
-from framelink.storage.interfaces import NoStorage
+from framelink.storage.core import _NoStorage
 
 
 def test_no_persistence(initial_framelink):
     pipeline, src_frame = initial_framelink
 
-    assert isinstance(pipeline.settings.default_storage, NoStorage)
+    assert isinstance(pipeline.settings.default_storage, _NoStorage)
 
     wrapped_store = MagicMock(wraps=pipeline.settings.default_storage)
     pipeline.settings.default_storage = wrapped_store
