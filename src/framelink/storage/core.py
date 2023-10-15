@@ -2,6 +2,7 @@ import functools
 import pickle
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
+from framelink.storage.exceptions import StorageReadException
 
 from framelink.storage.interfaces import FileStorage, FramelinkStorage
 from framelink.types import T
@@ -14,10 +15,10 @@ class _NoStorage(FramelinkStorage):
     def __init__(self) -> None:
         super().__init__()
 
-    def _store_frame(self, model: "FramelinkModel", result_frame: "T"):
+    def _frame_store(self, *args, **kwargs):
         pass
 
-    def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> None:
+    def _frame_lookup(self, *args, **kwargs) -> None:
         return None
 
 
@@ -29,15 +30,15 @@ def NoStorage() -> _NoStorage:
 
 
 class InMemory(FramelinkStorage):
-    def __init__(self, lookup_from_store: bool = True) -> None:
-        super().__init__(lookup_from_store)
+    def __init__(self) -> None:
+        super().__init__()
         self._cache = functools.lru_cache()
 
-    def _store_frame(self, model: "FramelinkModel", result_frame: "T"):
+    def _frame_store(self, model: "FramelinkModel[T]", result_frame: "T"):
         # This is stored for us by the lru cache
         pass
 
-    def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> Optional["T"]:
+    def _frame_lookup(self, model: "FramelinkModel[T]", *args, **kwargs) -> Optional["T"]:
         cache = self._cache(model.build)
         return cache()
 
@@ -46,13 +47,20 @@ class PickleStorage(FileStorage):
     def __init__(self, data_dir: Path):
         super().__init__(data_dir, "pickle")
 
-    def _store_frame(self, model: "FramelinkModel", result_frame: "T"):
+    def _frame_store(self, model: "FramelinkModel[T]", result_frame: "T"):
         path = self._get_model_path(model)
         with path.open("wb") as f:
-            pickle.dumps(f)
+            pickle.dump(result_frame, f)
 
-    def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> Optional["T"]:
+    def _frame_lookup(self, model: "FramelinkModel[T]", *args, **kwargs) -> Optional["T"]:
         path = self._get_model_path(model)
-        with path.open("rb") as f:
-            res = pickle.load(f)
-        return res
+
+        if not path.exists():
+            return None
+
+        try:
+            with path.open("rb") as f:
+                res = pickle.load(f)
+            return res
+        except EOFError as e:
+            raise StorageReadException from e

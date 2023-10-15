@@ -90,7 +90,8 @@ def test_model_ref(initial_framelink):
 
         @pipeline.model()
         def downstream_model(ctx: FramelinkPipeline):
-            return ctx.ref(model_tail).head(2)
+
+            return ctx.ref(model_tail).head(2)  # type: ignore this is expected
 
         pipeline.build(downstream_model)
 

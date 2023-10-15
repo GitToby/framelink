@@ -141,8 +141,9 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
             ctx.log.info(f"Building {self.name}...")
 
             start_time = time.perf_counter()
-            res = self._store(self, ctx)
+            res = self._store.retrieve_or_build(self, ctx)
             # question: this timer is the whole stream, how can we isolate just the build time for this model?
+            # a: subtract the total time thats stored in the ctx?
             build_time = time.perf_counter() - start_time
             ctx.log.info(f"Finished building {self.name} in {build_time:.3}s")
 

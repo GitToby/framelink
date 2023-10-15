@@ -1,12 +1,16 @@
 import abc
 from abc import ABC
+import logging
 from pathlib import Path
 from typing import Any, Generic, Optional, TYPE_CHECKING
+from framelink.storage.exceptions import StorageReadException
 
 from framelink.types import T
 
 if TYPE_CHECKING:
     from framelink.core import FramelinkModel, FramelinkPipeline
+
+LOG = logging.getLogger("storage")
 
 
 class FramelinkStorage(abc.ABC, Generic[T]):
@@ -14,18 +18,15 @@ class FramelinkStorage(abc.ABC, Generic[T]):
     The interface for interacting with a specific persistence medium for each model.
     """
 
-    def __init__(self, lookup_from_store: bool = True) -> None:
-        self.lookup_from_store = lookup_from_store
-
     @abc.abstractmethod
-    def _store_frame(self, model: "FramelinkModel", result_frame: "T"):
+    def _frame_store(self, model: "FramelinkModel[T]", result_frame: "T"):
         ...
 
     @abc.abstractmethod
-    def _frame_lookup(self, model: "FramelinkModel", *args, **kwargs) -> Optional["T"]:
+    def _frame_lookup(self, model: "FramelinkModel[T]", *args, **kwargs) -> Optional["T"]:
         ...
 
-    def __call__(self, model: "FramelinkModel", ctx: "FramelinkPipeline", *args, **kwargs) -> "T":
+    def retrieve_or_build(self, model: "FramelinkModel[T]", ctx: "FramelinkPipeline", *args, **kwargs) -> "T":
         """
         This method should act as the retrieval function. A cache hit from `_store_frame` should return the stored
          frame, a cache miss will then just call the model and store its result using the `_store_frame` method.
@@ -34,10 +35,18 @@ class FramelinkStorage(abc.ABC, Generic[T]):
         :param ctx: the framelink context to execute against.
         :return: a cached frame or a new frame.
         """
-        result = self._frame_lookup(model, *args, **kwargs) if self.lookup_from_store else None
+        LOG.info(f"looking up model {model.name}")
+        try:
+            result = self._frame_lookup(model, *args, **kwargs)
+        except StorageReadException as e:
+            # todo: allow users to bubble up read exceptions?
+            LOG.warning(f"Failed read for model {model.name} with error {str(e)}")
+            result = None
+
         if result is None:
+            LOG.info(f"no result for {model.name}")
             result = model.callable(ctx)
-            self._store_frame(model, result)
+            self._frame_store(model, result)
         return result
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from framelink.core import FramelinkModel, FramelinkPipeline, F, T
+from framelink.core import FramelinkModel, FramelinkPipeline, F
 
 TEST_ROOT_DIR = Path(__file__).parent
 DATA_DIR = TEST_ROOT_DIR.parent.parent / "data"
@@ -14,7 +14,7 @@ random.seed(0)
 
 
 @pytest.fixture
-def src_frame() -> F[T]:
+def src_frame() -> F[pd.DataFrame]:
     def src_frame(_: FramelinkPipeline) -> pd.DataFrame:
         """
         Mock data frame for testing purposes
@@ -39,7 +39,7 @@ def empty_framelink() -> FramelinkPipeline:
 
 
 @pytest.fixture
-def initial_framelink(src_frame) -> tuple[FramelinkPipeline, FramelinkModel[T]]:
+def initial_framelink(src_frame) -> tuple[FramelinkPipeline, FramelinkModel[pd.DataFrame]]:
     """
     :return: pipeline with a src frame already attached
     """
