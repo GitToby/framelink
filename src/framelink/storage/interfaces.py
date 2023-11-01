@@ -18,6 +18,10 @@ class FramelinkStorage(abc.ABC, Generic[T]):
     The interface for interacting with a specific persistence medium for each model.
     """
 
+    hits = 0
+    misses = 0
+    exceptions = 0
+
     @abc.abstractmethod
     def _frame_store(self, model: "FramelinkModel[T]", result_frame: "T"):
         ...
@@ -41,12 +45,16 @@ class FramelinkStorage(abc.ABC, Generic[T]):
         except StorageReadException as e:
             # todo: allow users to bubble up read exceptions?
             LOG.warning(f"Failed read for model {model.name} with error {str(e)}")
+            self.exceptions += 1
             result = None
 
         if result is None:
             LOG.info(f"no result for {model.name}")
             result = model.callable(ctx)
             self._frame_store(model, result)
+            self.misses += 1
+        else:
+            self.hits += 1
         return result
 
 

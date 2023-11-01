@@ -1,4 +1,5 @@
 import contextlib
+from functools import update_wrapper
 import inspect
 import logging
 import textwrap
@@ -28,11 +29,7 @@ class FramelinkSettings:
 
 
 class _FramelinkComponent(Protocol):
-    _name: str
-
-    @property
-    def __name__(self):
-        return self._name
+    __name__: str
 
     @property
     def __loc__(self):
@@ -41,7 +38,7 @@ class _FramelinkComponent(Protocol):
     @property
     def name(self) -> str:
         """
-        Util method for __name__ for natural flow in writing code.
+        Util method for a nice name for natural flow in writing code.
         """
         return self.__name__
 
@@ -76,7 +73,7 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
     ):
         # These are more "model settings"
         self.callable = model_func
-        self._name = model_func.__name__
+        self.__name__ = model_func.__name__
         self._store = store
 
         # These are the core attributes of the Model
@@ -118,7 +115,7 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
 
     @property
     def call_count(self) -> int:
-        """return the numer of times this model has been called"""
+        """return the number of times this model has been called"""
         return len(self.call_perf)
 
     @property
@@ -139,6 +136,7 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         """
         with self._own_logging(ctx):
             ctx.log.info(f"Building {self.name}...")
+            ctx.log.info(f"Found {len(self.upstreams)} upstream models")
 
             start_time = time.perf_counter()
             res = self._store.retrieve_or_build(self, ctx)
@@ -172,14 +170,14 @@ class FramelinkPipeline(_FramelinkComponent):
 
     def __init__(self, name: str = "default", settings: FramelinkSettings = FramelinkSettings()):
         super().__init__()
-        self._name = name
+        self.__name__ = name
         self._models = dict()
         self.graph = nx.DiGraph()
         self.settings = settings
         self._log = logging.getLogger(self.name)
         self._log.setLevel(settings.default_log_level)
         self.log = self._log
-        CLI_CONTEXT.fl_pipelines[self._name] = self
+        CLI_CONTEXT.fl_pipelines[self.__name__] = self
 
     def __repr__(self):
         return f"<{self.name} with {len(self)} models at {self.__loc__}>"
@@ -229,10 +227,11 @@ class FramelinkPipeline(_FramelinkComponent):
             :param func: "PYPE_MODEL": the callable function that defines the model
             :returns: the wrapped model with all the extra pieces
             """
-
-            model_wrapper: FramelinkModel = FramelinkModel(
+            model_wrapper = FramelinkModel[T](
                 func, self.graph, self.settings, logging_level=logging_level, store=model_store_unwrapped
             )
+            update_wrapper(model_wrapper, func)  # type: ignore
+
             self._log.info(f"Registering model '{model_wrapper.name}'")
 
             # we need to keep a ref to the underlying graph to access the models when we ask for them via

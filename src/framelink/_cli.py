@@ -63,7 +63,7 @@ def list_models(graph: bool = typer.Option(False, "-g")):
 def _import_pipelines_from_file(main_file: Path) -> None:
     """
     This function will, given a python file, import the code. If it contains a Framelink pipeline we will have the
-    contex available for inspection and execution.
+    context available for inspection and execution.
     :param main_file: the path to the python file to be imported.
     """
     if main_file.suffix != ".py":

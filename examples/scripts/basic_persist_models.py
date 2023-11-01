@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 import random
+import time
 import uuid
 
 import pandas as pd
@@ -23,9 +24,9 @@ pickle_storage = PickleStorage(data_dir=DATA_DIR)
 @pipeline.model()
 def src_model_1(_: FramelinkPipeline) -> pd.DataFrame:
     """
-    Produce a random dataframe of values for examples, ids 0 -> 99
+    Produce a random dataframe of values for examples, ids 0 -> 9999
     """
-    n = 100
+    n = 10000
     data = {
         "id_col": list(range(n)),
         "colour_col": [random.choice(["red", "green", "blue"]) for _ in range(n)],
@@ -38,15 +39,16 @@ def src_model_1(_: FramelinkPipeline) -> pd.DataFrame:
 @pipeline.model(storage=pickle_storage)
 def src_model_2(_: FramelinkPipeline) -> pd.DataFrame:
     """
-    Produce a random dataframe of values for examples, ids 100 -> 199
+    Produce a random dataframe of values for examples, ids 10000 -> 19999
     """
-    n = 100
+    n = 10000
     data = {
         "id_col": list(x + 100 for x in range(n)),
         "colour_col": [random.choice(["yellow", "grey", "blue"]) for _ in range(n)],
         "uuid_col": [str(uuid.uuid4()) for _ in range(n)],
         "int_col": [random.randint(-100, 100) for _ in range(n)],
     }
+    time.sleep(2)
     return pd.DataFrame(data)
 
 
@@ -73,11 +75,17 @@ def blue_head(ctx: FramelinkPipeline) -> pd.DataFrame:
 
 @pipeline.model()
 def blue_tail(ctx: FramelinkPipeline) -> pd.DataFrame:
-    ctx.log.info("running thing..")
+    """
+    Only the blue ones
+    """
+    ctx.log.info("logging inside model..")
     frame: pd.DataFrame = ctx.ref(only_blue_records_by_int_col)
     return frame.tail()
 
 
-pipeline.build(
-    blue_tail,
-)
+print(blue_tail.__doc__)
+print(blue_tail.__name__)
+print(blue_tail.__module__)
+# pipeline.build(
+#     blue_tail,
+# )
