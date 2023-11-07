@@ -5,7 +5,7 @@ import networkx as nx
 import pandas as pd
 import pytest as pytest
 
-from framelink.core import FramelinkModel, FramelinkPipeline
+from framelink import FramelinkPipeline
 
 
 def test_model_link_dag(initial_framelink):
@@ -21,8 +21,6 @@ def test_model_link_dag(initial_framelink):
             "int_col": [random.randint(0, 100) for _ in range(n)],
         }
         return pd.DataFrame(data)
-
-    src_model_2: FramelinkModel[pd.DataFrame]
 
     @pipeline.model()
     def only_blue_records(ctx: FramelinkPipeline) -> pd.DataFrame:

@@ -9,7 +9,7 @@ import typer
 from rich import print
 
 if TYPE_CHECKING:
-    from framelink.core import FramelinkPipeline
+    from framelink._core import FramelinkPipeline
 
 _app = typer.Typer()
 
@@ -86,6 +86,16 @@ def build(model_name: str = typer.Argument(...)):
     :return:
     """
     print(f"building {model_name}")
+
+
+@_app.command()
+def deploy_to(target_name: str = typer.Argument(...)):
+    """
+
+    :param model_name:
+    :return:
+    """
+    print(f"building deployment target {target_name}")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from framelink.core import FramelinkModel, FramelinkPipeline, F
+from framelink._core import FramelinkModel, FramelinkPipeline, F
 
 TEST_ROOT_DIR = Path(__file__).parent
 DATA_DIR = TEST_ROOT_DIR.parent.parent / "data"

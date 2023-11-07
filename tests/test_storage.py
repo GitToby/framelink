@@ -2,8 +2,8 @@ import pandas as pd
 import polars as pl
 import pytest as pytest
 
-from framelink.core import FramelinkPipeline
-from framelink.storage.core import _NoStorage
+from framelink import FramelinkPipeline
+from framelink.storage._core import _NoStorage
 
 
 def test_no_persistence(initial_framelink):

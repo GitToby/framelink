@@ -1,6 +1,6 @@
 import pandas as pd
 
-from framelink.core import FramelinkPipeline
+from framelink import FramelinkPipeline
 
 
 def test_model_run(initial_framelink):

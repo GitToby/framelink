@@ -2,7 +2,7 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from framelink.core import FramelinkModel, FramelinkPipeline
+from framelink import FramelinkModel, FramelinkPipeline
 
 
 def test_model_registration(empty_framelink):

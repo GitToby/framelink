@@ -5,7 +5,7 @@ import networkx as nx
 import pandas as pd
 import pytest
 
-from framelink.core import FramelinkPipeline
+from framelink import FramelinkPipeline
 
 
 def test_merge_pipelines_missing_merge(src_frame):

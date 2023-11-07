@@ -8,7 +8,7 @@ from framelink.storage.exceptions import StorageReadException
 from framelink.types import T
 
 if TYPE_CHECKING:
-    from framelink.core import FramelinkModel, FramelinkPipeline
+    from framelink._core import FramelinkModel, FramelinkPipeline
 
 LOG = logging.getLogger("storage")
 
@@ -50,7 +50,7 @@ class FramelinkStorage(abc.ABC, Generic[T]):
 
         if result is None:
             LOG.info(f"no result for {model.name}")
-            result = model.callable(ctx)
+            result = model._callable(ctx)
             self._frame_store(model, result)
             self.misses += 1
         else:

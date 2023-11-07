@@ -8,7 +8,7 @@ from framelink.storage.interfaces import FileStorage, FramelinkStorage
 from framelink.types import T
 
 if TYPE_CHECKING:
-    from framelink.core import FramelinkModel
+    from framelink._core import FramelinkModel
 
 
 class _NoStorage(FramelinkStorage):
@@ -26,10 +26,17 @@ _no_storage_singleton = _NoStorage()
 
 
 def NoStorage() -> _NoStorage:
+    """
+    All models will be computed every time they are ref'd.
+    """
     return _no_storage_singleton
 
 
 class InMemory(FramelinkStorage):
+    """
+    Use the `functools.lru_cache` to store the results of our models. Useful when theres more computation/IO than data.
+    """
+
     def __init__(self) -> None:
         super().__init__()
         self._cache = functools.lru_cache()
@@ -44,8 +51,14 @@ class InMemory(FramelinkStorage):
 
 
 class PickleStorage(FileStorage):
-    def __init__(self, data_dir: Path):
-        super().__init__(data_dir, "pickle")
+    """
+    Stores the resulting python object as a pickle object on disk at the specified location
+    """
+
+    def __init__(self, data_dir: Path | str):
+        if type(data_dir) == str:
+            data_dir = Path(data_dir)
+        super().__init__(data_dir, "pickle")  # type: ignore
 
     def _frame_store(self, model: "FramelinkModel[T]", result_frame: "T"):
         path = self._get_model_path(model)

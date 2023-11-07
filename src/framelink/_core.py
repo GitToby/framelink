@@ -14,7 +14,7 @@ import pydot
 
 from framelink._cli import CLI_CONTEXT
 from framelink._util import parse_model_src_for_internal_refs
-from framelink.storage.core import NoStorage
+from framelink.storage._core import NoStorage
 from framelink.storage.interfaces import FramelinkStorage
 from framelink.types import F, T
 
@@ -58,7 +58,7 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
      - adapters to run the model on various engines
     """
 
-    callable: F[T]
+    _callable: F[T]
     _graph_ref: nx.DiGraph
     call_perf: tuple[float, ...] = tuple()
 
@@ -72,8 +72,9 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         store: FramelinkStorage[T] = NoStorage(),
     ):
         # These are more "model settings"
-        self.callable = model_func
+        self._callable = model_func
         self.__name__ = model_func.__name__
+        self.__qualname__ = model_func.__qualname__
         self._store = store
 
         # These are the core attributes of the Model
@@ -103,13 +104,13 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
     @property
     def docstring(self) -> Optional[str]:
         """ """
-        doc__ = self.callable.__doc__
+        doc__ = self._callable.__doc__
         return textwrap.dedent(doc__).strip() if doc__ else None
 
     @property
     def source(self) -> str:
         """ """
-        source__ = inspect.getsource(self.callable)
+        source__ = inspect.getsource(self._callable)
         source__ = textwrap.dedent(source__).strip()
         return source__
 
@@ -128,6 +129,9 @@ class FramelinkModel(_FramelinkComponent, Generic[T]):
         old_log, ctx.log = ctx.log, self._log
         yield
         ctx.log = old_log
+
+    def __call__(self, ctx: "FramelinkPipeline") -> T:
+        return self.build(ctx)
 
     def build(self, ctx: "FramelinkPipeline") -> T:
         """
@@ -206,9 +210,7 @@ class FramelinkPipeline(_FramelinkComponent):
         pos = nx.planar_layout(self.graph)
         return nx.draw_networkx(self.graph, pos)
 
-    def model(
-        self, *, logging_level=None, storage: Optional[FramelinkStorage[T]] = None
-    ) -> Callable[[F[T]], FramelinkModel[T]]:
+    def model(self, *, logging_level=None, storage: Optional[FramelinkStorage] = None):
         """
         Annotation to register a model to the framelink pipeline.
 
@@ -221,7 +223,7 @@ class FramelinkPipeline(_FramelinkComponent):
         else:
             model_store_unwrapped = self.settings.default_storage
 
-        def _decorator(func: F[T]) -> FramelinkModel[T]:
+        def _decorator(func: Callable[["FramelinkPipeline"], T]) -> FramelinkModel[T]:
             """Internal wrapping of the model function to produce the metadata about the model.
 
             :param func: "PYPE_MODEL": the callable function that defines the model
@@ -241,10 +243,10 @@ class FramelinkPipeline(_FramelinkComponent):
 
             # todo: brainstorm more new ways of doing this.
             matches = parse_model_src_for_internal_refs(model_wrapper.source)
-            matched_models = (self.get(name) for name in matches)
+            refd_models = (self.get(name) for name in matches)
 
             self.graph.add_node(model_wrapper)
-            upstream_edges = ((upstream_model, model_wrapper) for upstream_model in matched_models)
+            upstream_edges = ((upstream_model, model_wrapper) for upstream_model in refd_models)
             self.graph.add_edges_from(upstream_edges)
             self._log.debug(
                 f"Model '{model_wrapper.name}' has {len(model_wrapper.upstreams)} upstreams: {model_wrapper.upstreams}"
@@ -263,6 +265,10 @@ class FramelinkPipeline(_FramelinkComponent):
         ref will return the (cached) frame result of the model, so you can extend the frame inside another model.
 
         Raises a KeyError if the model Key cant be found.
+
+        Also see:
+          - .get()
+          - .build()
 
         :param model: _Model: The model function with output you want to use.
         Example:
@@ -284,6 +290,10 @@ class FramelinkPipeline(_FramelinkComponent):
     def build(self, model_name: Union[FramelinkModel[T], str]) -> T:
         """Building models is just proxied through to ref. Each build command should build only the given node in the
          graph up to the nearest cache or persisted cache.
+
+        Also see:
+          - .get()
+          - .ref()
 
         :param model_name: "PYPE_MODEL": the model to build in the context of this pipeline.
         :param overrides: A mapping of models whos result should be overridden for this build.
@@ -346,6 +356,9 @@ class FramelinkPipeline(_FramelinkComponent):
         """
         Given a `FramelinkModel`, or the model's name, return the`FramelinkModel`.
 
+        Also see:
+          - .get()
+          - .build()
 
         :param model: Model function or the model name (function name).
         :returns: The `FramelinkModel` that wraps the model.

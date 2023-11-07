@@ -2,7 +2,7 @@ import logging
 
 import pandas as pd
 
-from framelink.core import FramelinkPipeline, FramelinkSettings
+from framelink import FramelinkPipeline, FramelinkSettings
 
 
 def test_basic_logging(src_frame, caplog):

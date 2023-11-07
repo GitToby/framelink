@@ -6,8 +6,9 @@ import uuid
 
 import pandas as pd
 
-from framelink.core import FramelinkPipeline, FramelinkSettings
-from framelink.storage.core import PickleStorage, NoStorage
+from framelink._core import FramelinkPipeline, FramelinkSettings
+from framelink.storage._core import PickleStorage, NoStorage
+from typing import reveal_type
 
 logging.basicConfig()
 
@@ -83,9 +84,13 @@ def blue_tail(ctx: FramelinkPipeline) -> pd.DataFrame:
     return frame.tail()
 
 
-print(blue_tail.__doc__)
-print(blue_tail.__name__)
 print(blue_tail.__module__)
+print(blue_tail.__name__)
+print(blue_tail.__qualname__)
+print(blue_tail.__doc__)
+print(blue_tail.__annotations__)
+reveal_type(blue_tail)
+# res = blue_head(pipeline)
 # pipeline.build(
 #     blue_tail,
 # )
